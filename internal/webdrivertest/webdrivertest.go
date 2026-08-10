@@ -1,7 +1,7 @@
-// Package seleniumtest provides tests to exercise package webdriver. These
+// Package webdrivertest provides tests to exercise package webdriver. These
 // tests are in a separate package to allow other test harnesses to validate
 // their behavior.
-package seleniumtest
+package webdrivertest
 
 import (
 	"bytes"

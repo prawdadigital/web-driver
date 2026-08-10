@@ -8,7 +8,7 @@ import (
 
 	"github.com/blang/semver"
 	webdriver "github.com/prawdadigital/web-driver"
-	"github.com/prawdadigital/web-driver/internal/seleniumtest"
+	"github.com/prawdadigital/web-driver/internal/webdrivertest"
 	"github.com/prawdadigital/web-driver/sauce"
 )
 
@@ -71,7 +71,7 @@ func TestSauce(t *testing.T) {
 		browser, version := strings.ToLower(browser), strings.ToLower(tc.version)
 
 		t.Run(name, func(t *testing.T) {
-			c := seleniumtest.Config{
+			c := webdrivertest.Config{
 				Browser:         browser,
 				SeleniumVersion: semver.MustParse(tc.selenium),
 				Sauce: &sauce.Capabilities{
@@ -82,8 +82,8 @@ func TestSauce(t *testing.T) {
 				},
 				Addr: addr,
 			}
-			seleniumtest.RunCommonTests(t, c)
-			seleniumtest.RunFirefoxTests(t, c)
+			webdrivertest.RunCommonTests(t, c)
+			webdrivertest.RunFirefoxTests(t, c)
 		})
 	}
 }

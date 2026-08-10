@@ -15,7 +15,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/golang/glog"
 	webdriver "github.com/prawdadigital/web-driver"
-	"github.com/prawdadigital/web-driver/internal/seleniumtest"
+	"github.com/prawdadigital/web-driver/internal/webdrivertest"
 	"github.com/prawdadigital/web-driver/selenium"
 )
 
@@ -129,20 +129,20 @@ func TestChrome(t *testing.T) {
 	}
 
 	t.Run("Chromedriver", func(t *testing.T) {
-		runChromeTests(t, seleniumtest.Config{
+		runChromeTests(t, webdrivertest.Config{
 			Path: *chromeBinary,
 		})
 	})
 
 	t.Run("Selenium3", func(t *testing.T) {
-		runChromeTests(t, seleniumtest.Config{
+		runChromeTests(t, webdrivertest.Config{
 			Path:            *chromeBinary,
 			SeleniumVersion: semver.MustParse("3.0.0"),
 		})
 	})
 }
 
-func runChromeTests(t *testing.T, c seleniumtest.Config) {
+func runChromeTests(t *testing.T, c webdrivertest.Config) {
 	c.Browser = "chrome"
 	c.Headless = *headless
 
@@ -171,16 +171,16 @@ func runChromeTests(t *testing.T, c seleniumtest.Config) {
 		t.Fatalf("Error starting the server: %v", err)
 	}
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
-	seleniumtest.RunCommonTests(t, c)
-	seleniumtest.RunChromeTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
+	webdrivertest.RunChromeTests(t, c)
 	// The Selenium 4 / W3C additions are supported directly by ChromeDriver, but
 	// not by the legacy Selenium 3 grid.
 	if c.SeleniumVersion.Major != 3 {
-		seleniumtest.RunW3CTests(t, c)
+		webdrivertest.RunW3CTests(t, c)
 	}
 
 	if err := s.Stop(); err != nil {
@@ -203,7 +203,7 @@ func TestSelenium4(t *testing.T) {
 		*chromeBinary = path
 	}
 
-	c := seleniumtest.Config{
+	c := webdrivertest.Config{
 		Browser:         "chrome",
 		Path:            *chromeBinary,
 		SeleniumVersion: semver.MustParse("4.0.0"),
@@ -239,13 +239,13 @@ func TestSelenium4(t *testing.T) {
 		t.Fatalf("Error starting the Selenium 4 server with JAR %q: %v", *selenium4Path, err)
 	}
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
-	seleniumtest.RunCommonTests(t, c)
-	seleniumtest.RunChromeTests(t, c)
-	seleniumtest.RunW3CTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
+	webdrivertest.RunChromeTests(t, c)
+	webdrivertest.RunW3CTests(t, c)
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the Selenium 4 service: %v", err)
@@ -269,14 +269,14 @@ func TestFirefox(t *testing.T) {
 	}
 
 	t.Run("Selenium3", func(t *testing.T) {
-		runFirefoxTests(t, *selenium3Path, seleniumtest.Config{
+		runFirefoxTests(t, *selenium3Path, webdrivertest.Config{
 			SeleniumVersion: semver.MustParse("3.0.0"),
 			ServiceOptions:  []selenium.ServiceOption{selenium.GeckoDriver(*geckoDriverPath)},
 			Path:            *firefoxBinarySelenium3,
 		})
 	})
 	t.Run("Geckodriver", func(t *testing.T) {
-		runFirefoxTests(t, *geckoDriverPath, seleniumtest.Config{
+		runFirefoxTests(t, *geckoDriverPath, webdrivertest.Config{
 			Path: *firefoxBinarySelenium3,
 		})
 	})
@@ -297,7 +297,7 @@ func TestHTMLUnit(t *testing.T) {
 		webdriver.SetDebug(true)
 	}
 
-	c := seleniumtest.Config{
+	c := webdrivertest.Config{
 		Browser:         "htmlunit",
 		SeleniumVersion: semver.MustParse("3.0.0"),
 		ServiceOptions:  []selenium.ServiceOption{selenium.HTMLUnit(*htmlUnitDriverPath)},
@@ -316,18 +316,18 @@ func TestHTMLUnit(t *testing.T) {
 	}
 	c.Addr = fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
-	seleniumtest.RunCommonTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the Selenium service: %v", err)
 	}
 }
 
-func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) {
+func runFirefoxTests(t *testing.T, webDriverPath string, c webdrivertest.Config) {
 	c.Browser = "firefox"
 
 	if *startFrameBuffer {
@@ -362,7 +362,7 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) 
 		t.Fatalf("Error starting the WebDriver server with binary %q: %v", webDriverPath, err)
 	}
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
@@ -374,8 +374,8 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) 
 
 	c.Headless = *headless
 
-	seleniumtest.RunCommonTests(t, c)
-	seleniumtest.RunFirefoxTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
+	webdrivertest.RunFirefoxTests(t, c)
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the Selenium service: %v", err)

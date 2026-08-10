@@ -61,7 +61,7 @@ The typical usage flow: start a `selenium.Service` → call `webdriver.NewRemote
 
 ### Testing internals
 
-- **`internal/seleniumtest/`** — the shared subtest bodies (import `webdriver` for the client, `selenium` for `ServiceOption`). The top-level `TestChrome`/`TestSelenium4`/`TestFirefox*`/`TestHTMLUnit` functions in the root `webdriver_test.go` (`package webdriver_test`) each set up a driver and run this common suite (`RunCommonTests`, plus `RunChromeTests`/`RunW3CTests`) against it.
+- **`internal/webdrivertest/`** — the shared subtest bodies (import `webdriver` for the client, `selenium` for `ServiceOption`). The top-level `TestChrome`/`TestSelenium4`/`TestFirefox*`/`TestHTMLUnit` functions in the root `webdriver_test.go` (`package webdriver_test`) each set up a driver and run this common suite (`RunCommonTests`, plus `RunChromeTests`/`RunW3CTests`) against it.
 - **`internal/zip/`** — zip helpers used when packaging extensions/profiles.
 - **`vendor/init.go`** — a standalone `main` binary (not module deps) that downloads browsers, drivers, and JARs for tests.
 - **`testing/`** — Dockerfile and scripts for the `--docker` hermetic test path.
