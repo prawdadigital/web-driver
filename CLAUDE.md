@@ -46,6 +46,7 @@ The typical usage flow: start a `Service` → call `NewRemote` against its URL �
 - **`firefox/`** — Firefox options (`firefox.Capabilities`), including profile packaging.
 - **`log/`** — log `Type` and `Level` constants used by `Capabilities.SetLogLevel` and `WebDriver.Log`.
 - **`sauce/`** — Sauce Labs cloud testing: capability translation and the Sauce Connect proxy tunnel.
+- **`appium/`** — Appium 2 mobile support: a `Capabilities` builder that enforces the `appium:` prefix, and a `Mobile` interface (embeds `WebDriver`) with mobile commands (contexts, orientation, geolocation, app lifecycle, keyboard, device, settings). Built on `WebDriver.ExecuteCommand`, the exported raw-session-command extension point in `remote.go`.
 
 ### Testing internals
 

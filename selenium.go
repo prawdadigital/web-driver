@@ -506,6 +506,14 @@ type WebDriver interface {
 	// perform JSON decoding.
 	ExecuteScriptAsyncRaw(script string, args []interface{}) ([]byte, error)
 
+	// ExecuteCommand issues a raw WebDriver command against the current session
+	// and returns the raw JSON response body. path is appended to the session
+	// URL, e.g. "/appium/device/shake" targets "/session/<id>/appium/device/shake".
+	// params, if non-nil, is JSON-encoded as the request body. This is an
+	// extension point for commands outside the core WebDriver API, such as the
+	// mobile commands implemented by the appium package.
+	ExecuteCommand(method, path string, params interface{}) ([]byte, error)
+
 	// WaitWithTimeoutAndInterval waits for the condition to evaluate to true.
 	WaitWithTimeoutAndInterval(condition Condition, timeout, interval time.Duration) error
 

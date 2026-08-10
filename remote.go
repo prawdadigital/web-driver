@@ -1311,6 +1311,20 @@ func (wd *remoteWD) ExecuteScriptRaw(script string, args []interface{}) ([]byte,
 	return wd.execScriptRaw(script, args, "/sync")
 }
 
+func (wd *remoteWD) ExecuteCommand(method, path string, params interface{}) ([]byte, error) {
+	var data []byte
+	if params != nil {
+		var err error
+		if data, err = json.Marshal(params); err != nil {
+			return nil, err
+		}
+	}
+	// The path is concatenated directly rather than passed through requestURL's
+	// format string so that any '%' in it is not treated as a format verb.
+	url := wd.urlPrefix + "/session/" + wd.id + path
+	return wd.execute(method, url, data)
+}
+
 func (wd *remoteWD) ExecuteScriptAsyncRaw(script string, args []interface{}) ([]byte, error) {
 	if !wd.w3cCompatible {
 		return wd.execScriptRaw(script, args, "_async")

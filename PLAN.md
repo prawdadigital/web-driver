@@ -129,6 +129,32 @@ All added behind the W3C session and verified end-to-end with headless Chrome 15
   replicates Selenium's own `relative.js` predicates and center-proximity sort
   (verified: directional matches, chained filters, and proximity ordering).
 
+### WS3 — Appium 2 support — DONE (verified via mock server; live device pending)
+
+New `appium/` package plus a small extension point in the core client.
+
+- `selenium.WebDriver.ExecuteCommand(method, path, params)`: exported raw
+  session-command executor (reuses the existing W3C error handling) so
+  extensions can issue commands outside the core API. Implemented on remoteWD.
+- `appium/capabilities.go`: fluent `Capabilities` builder that auto-applies the
+  `appium:` prefix to non-standard capabilities (Appium 2 rejects unprefixed
+  ones); standard W3C caps and already-prefixed vendor caps are left alone.
+- `appium/appium.go`: `Mobile` interface embedding `selenium.WebDriver`, with
+  `appium.NewRemote` (defaults documented for Appium 2's root base path) and
+  `NewMobile` (wrap an existing session). Commands: contexts
+  (available/current/switch), orientation, geolocation, app lifecycle
+  (install/isInstalled/activate/terminate/remove/state), keyboard
+  (hide/isShown/press+longPress keycode), device (lock/unlock/isLocked/shake/
+  time), and settings (get/update).
+- `appium/appium_test.go`: httptest mock verifying the exact wire format
+  (method/path/body) of session creation and every command group, plus the
+  capability-prefix logic. `go test ./appium/` passes.
+
+Note: the user has already confirmed a basic Appium session connects through
+this client. A full live smoke test of the new mobile commands needs a running
+Appium 2 server + device/emulator, which is not available in this dev
+environment; the mock tests lock down the protocol in the meantime.
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub
@@ -149,4 +175,5 @@ These predate this work and currently block `go test` from compiling:
 
 ## Open items to confirm during implementation
 
-- Appium 2 default base path for the target server setup (WS3).
+- Live smoke test of the appium mobile commands against a real Appium 2 server
+  + device/emulator (WS4, on the user's side).
