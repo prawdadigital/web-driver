@@ -39,7 +39,7 @@ cd vendor && go run init.go --alsologtostderr --download_browsers --download_lat
 
 ## Architecture
 
-The root `webdriver` package holds the contract and the transport. Its central abstractions are the `WebDriver` interface (browser session: navigation, cookies, script execution, actions, waits) and the `WebElement` interface (per-element operations). Both are defined in `selenium.go`, alongside all shared value types (`Capabilities`, `Proxy`, `Cookie`, `Status`, `Rect`, `PrintOptions`) and protocol constants (`By*` locators, keyboard keys, pointer/key action types).
+The root `webdriver` package holds the contract and the transport. Its central abstractions are the `WebDriver` interface (browser session: navigation, cookies, script execution, actions, waits) and the `WebElement` interface (per-element operations). Both are defined in `webdriver.go`, alongside all shared value types (`Capabilities`, `Proxy`, `Cookie`, `Status`, `Rect`, `PrintOptions`) and protocol constants (`By*` locators, keyboard keys, pointer/key action types).
 
 - **`remote.go`** (package `webdriver`) — the only concrete `WebDriver` implementation (`remoteWD`). `NewRemote(caps, urlPrefix)` connects to an already-running WebDriver server over HTTP and translates every interface method into WebDriver protocol requests. It negotiates the legacy JSON Wire protocol vs. the W3C spec per session (`w3cCompatible`). This is where protocol-level behavior and browser quirks live. `ExecuteCommand(method, path, params)` is the exported extension point that lets other packages (e.g. `appium`) issue arbitrary session commands reusing the W3C error handling.
 
@@ -61,7 +61,7 @@ The typical usage flow: start a `selenium.Service` → call `webdriver.NewRemote
 
 ### Testing internals
 
-- **`internal/seleniumtest/`** — the shared subtest bodies (import `webdriver` for the client, `selenium` for `ServiceOption`). The top-level `TestChrome`/`TestSelenium4`/`TestFirefox*`/`TestHTMLUnit` functions in the root `selenium_test.go` (`package webdriver_test`) each set up a driver and run this common suite (`RunCommonTests`, plus `RunChromeTests`/`RunW3CTests`) against it.
+- **`internal/seleniumtest/`** — the shared subtest bodies (import `webdriver` for the client, `selenium` for `ServiceOption`). The top-level `TestChrome`/`TestSelenium4`/`TestFirefox*`/`TestHTMLUnit` functions in the root `webdriver_test.go` (`package webdriver_test`) each set up a driver and run this common suite (`RunCommonTests`, plus `RunChromeTests`/`RunW3CTests`) against it.
 - **`internal/zip/`** — zip helpers used when packaging extensions/profiles.
 - **`vendor/init.go`** — a standalone `main` binary (not module deps) that downloads browsers, drivers, and JARs for tests.
 - **`testing/`** — Dockerfile and scripts for the `--docker` hermetic test path.

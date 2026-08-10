@@ -46,7 +46,7 @@ Re-run this periodically to get up-to-date versions of these binaries.
 
 ## Documentation
 
-The API documentation is at https://godoc.org/github.com/prawdadigital/web-driver. See [the example](https://github.com/prawdadigital/web-driver/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/prawdadigital/web-driver/blob/master/sauce_test.go), [selenium](https://github.com/prawdadigital/web-driver/blob/master/selenium_test.go) and [service](https://github.com/prawdadigital/web-driver/blob/master/selenium/service_test.go)) for better usage information.
+The API documentation is at https://godoc.org/github.com/prawdadigital/web-driver. See [the example](https://github.com/prawdadigital/web-driver/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/prawdadigital/web-driver/blob/master/sauce_test.go), [selenium](https://github.com/prawdadigital/web-driver/blob/master/webdriver_test.go) and [service](https://github.com/prawdadigital/web-driver/blob/master/selenium/service_test.go)) for better usage information.
 
 ## Known Issues
 
