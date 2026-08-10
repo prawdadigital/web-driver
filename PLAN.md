@@ -3,6 +3,55 @@
 This fork of `tebeka/selenium` is being extended to support **Selenium 4** and
 **Appium 2**. This document is the working plan; update it as milestones land.
 
+---
+
+## Phase 2 — next steps (branch `2nd-claude`)
+
+Phase 1 shipped to `develop` via PR #1: Selenium 4 support, Appium 2 support, and
+the package restructure (pure-contract `webdriver` root + `remote` transport +
+`selenium` services + `appium` mobile). Its full record is preserved below under
+"Progress". Phase 2 focuses on input actions/gestures and hardening.
+
+Proposed workstreams, in priority order (reprioritize as needed):
+
+### WS5 — Input actions & gestures
+The biggest functional gap identified after Phase 1.
+- **Wheel actions** (`webdriver`): add the W3C "wheel" input source — a
+  `WheelAction` type + `ScrollAction` constructor + `StoreWheelActions`, or a
+  higher-level `ScrollBy`/`ScrollToElement`. Live-verify in Chrome.
+- **Gesture helpers** (`appium.Mobile`): `Tap`, `LongPress`, `Swipe`, `Scroll`,
+  `Pinch`/`Zoom`, built on W3C touch pointer actions so they work driver-agnostically.
+- **Appium `mobile:` command wrappers**: typed helpers over
+  `ExecuteScript("mobile: ...", args)` for the common gestures
+  (`swipeGesture`, `scrollGesture`, `longClickGesture`, `dragGesture`, `pinchOpen/CloseGesture`).
+- Decide the split: pure-W3C gestures vs. `mobile:`-based; document which each driver supports.
+
+### WS6 — Firefox / GeckoDriver on Selenium 4
+Phase 1 live testing focused on Chrome. Validate the W3C path with Firefox:
+add a Firefox subtest to `TestSelenium4` (or a Geckodriver-direct W3C run) and
+confirm the new WS2 features behave (or are correctly skipped) on Firefox.
+
+### WS7 — CI/CD modernization
+The Travis badge/config is stale (points at `tebeka`, and travis-ci.org is
+retired). Add a GitHub Actions workflow: `go build ./...`, `gofmt -l`, `go vet`,
+and unit tests (`appium`/`chrome`/`sauce`/`selenium`), plus an optional Linux
+Selenium 4 integration job. Update or drop the README badges.
+
+### WS8 — Test-suite hardening
+Address the pre-existing/environmental issues surfaced by `TestSelenium4`:
+- `FindElement/css_selector` click-then-check-URL race — add an explicit wait.
+- `AddCookie` cookie-field diff on recent Chrome — reconcile expectations.
+- `Proxy/SOCKS` — Selenium Manager `--proxy` quirk when no ChromeDriver is
+  vendored; vendor a driver in CI or gate the test.
+- `go vet`: `internal/webdrivertest` "Fatalf from a non-test goroutine".
+
+### WS9 — Desktop / native "regular" apps (optional)
+The client is protocol-generic, so it can already reach Appium desktop drivers
+(appium-windows-driver, mac2). Add documentation + an example (and, if useful, a
+small helper) for driving native desktop apps; note it is untested here.
+
+---
+
 ## Current state (baseline)
 
 The client already speaks both the legacy JSON Wire protocol and W3C WebDriver,
