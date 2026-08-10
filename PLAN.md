@@ -168,6 +168,29 @@ environment; the mock tests lock down the protocol in the meantime.
 - Updated a chrome unit test that had encoded the old `"w3c": false` behavior to
   expect the WS1-corrected output, and added a `W3C: true` case.
 
+### WS4 — Test coverage for the new features — DONE (live-verified)
+
+- `internal/seleniumtest`: added `RunW3CTests` with shared subtests for the WS2
+  features — window rect, new window, print-to-PDF, shadow DOM, and relative
+  locators — plus two new served test pages (`/shadow`, `/relative`).
+- `selenium/selenium_test.go`: added `TestSelenium4` (launches the Selenium 4
+  JAR, runs the common + chrome + W3C suites against Chrome) and a
+  `-selenium4_path` flag. `runChromeTests` now also runs `RunW3CTests` for the
+  non-Selenium-3 (ChromeDriver) path.
+- Fixed a restructure side effect: `go test ./selenium/` runs with the package
+  dir as its working directory, so `TestMain` now chdirs to the repo root
+  (identified by go.mod) to keep the root-relative `vendor/` and `testing/`
+  fixture paths resolving (important for the Linux CI/Docker flow).
+
+Live result (Selenium 4.39.0 + headless Chrome 151): all five W3C feature
+subtests pass. The other common/chrome subtests that fail on this dev box are
+pre-existing and environmental, not regressions from this work:
+`FindElement/css_selector` (click-then-check-URL timing race), `AddCookie`
+(cookie-field diff on Chrome 151), `Proxy/SOCKS` (Selenium Manager `--proxy`
+quirk when no ChromeDriver is vendored — provided on CI), and `Extension`
+(needs `testing/chrome_extension` assets absent from this repo, and headless
+Chrome cannot load extensions).
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub

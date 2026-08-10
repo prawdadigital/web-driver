@@ -20,6 +20,7 @@ import (
 
 var (
 	selenium3Path          = flag.String("selenium3_path", "", "The path to the Selenium 3 server JAR. If empty or the file is not present, Firefox tests using Selenium 3 will not be run.")
+	selenium4Path          = flag.String("selenium4_path", "", "The path to the Selenium 4 server JAR. If empty or the file is not present, the Selenium 4 tests will not be run.")
 	firefoxBinarySelenium3 = flag.String("firefox_binary_for_selenium3", "vendor/firefox/firefox", "The name of the Firefox binary for Selenium 3 tests or the path to it. If the name does not contain directory separators, the PATH will be searched.")
 	geckoDriverPath        = flag.String("geckodriver_path", "", "The path to the geckodriver binary. If empty or the file is not present, the Geckodriver tests will not be run.")
 	javaPath               = flag.String("java_path", "", "The path to the Java runtime binary to invoke. If not specified, 'java' will be used.")
@@ -38,6 +39,18 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// The core package lives in selenium/, but the test fixtures (vendor/ and
+	// testing/) live at the repository root. `go test ./selenium/` runs with the
+	// package directory as the working directory, so move up to the repo root
+	// (identified by go.mod) to keep the repo-root-relative paths resolving.
+	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join("..", "go.mod")); err == nil {
+			if err := os.Chdir(".."); err != nil {
+				fmt.Fprintf(os.Stderr, "Exiting early: unable to chdir to repo root -- %s", err)
+				os.Exit(1)
+			}
+		}
+	}
 	if err := setDriverPaths(); err != nil {
 		fmt.Fprintf(os.Stderr, "Exiting early: unable to get the driver paths -- %s", err.Error())
 		os.Exit(1)
@@ -77,6 +90,10 @@ func findBestPath(glob string, binary bool) string {
 func setDriverPaths() error {
 	if *selenium3Path == "" {
 		*selenium3Path = findBestPath("vendor/selenium-server*" /*binary=*/, false)
+	}
+
+	if *selenium4Path == "" {
+		*selenium4Path = findBestPath("vendor/selenium-server*" /*binary=*/, false)
 	}
 
 	if *geckoDriverPath == "" {
@@ -171,9 +188,78 @@ func runChromeTests(t *testing.T, c seleniumtest.Config) {
 
 	seleniumtest.RunCommonTests(t, c)
 	seleniumtest.RunChromeTests(t, c)
+	// The Selenium 4 / W3C additions are supported directly by ChromeDriver, but
+	// not by the legacy Selenium 3 grid.
+	if c.SeleniumVersion.Major != 3 {
+		seleniumtest.RunW3CTests(t, c)
+	}
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the ChromeDriver service: %v", err)
+	}
+}
+
+func TestSelenium4(t *testing.T) {
+	if *useDocker {
+		t.Skip("Skipping Selenium 4 tests because they will be run under a Docker container")
+	}
+	if _, err := os.Stat(*selenium4Path); err != nil {
+		t.Skipf("Skipping Selenium 4 tests because the server JAR was not found at path %q", *selenium4Path)
+	}
+	if _, err := os.Stat(*chromeBinary); err != nil {
+		path, err := exec.LookPath(*chromeBinary)
+		if err != nil {
+			t.Skipf("Skipping Selenium 4 tests because Chrome binary %q not found", *chromeBinary)
+		}
+		*chromeBinary = path
+	}
+
+	c := seleniumtest.Config{
+		Browser:         "chrome",
+		Path:            *chromeBinary,
+		SeleniumVersion: semver.MustParse("4.0.0"),
+		Headless:        *headless,
+	}
+
+	if *startFrameBuffer {
+		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
+	}
+	if testing.Verbose() {
+		selenium.SetDebug(true)
+		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
+	}
+	if *javaPath != "" {
+		c.ServiceOptions = append(c.ServiceOptions, selenium.JavaPath(*javaPath))
+	}
+	// If a ChromeDriver binary is available, point the Selenium 4 server at it;
+	// otherwise the server's Selenium Manager will provision one automatically.
+	if *chromeDriverPath != "" {
+		if _, err := os.Stat(*chromeDriverPath); err == nil {
+			c.ServiceOptions = append(c.ServiceOptions, selenium.ChromeDriver(*chromeDriverPath))
+		}
+	}
+
+	port, err := pickUnusedPort()
+	if err != nil {
+		t.Fatalf("pickUnusedPort() returned error: %v", err)
+	}
+	c.Addr = fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
+
+	s, err := selenium.NewSeleniumService(*selenium4Path, port, c.ServiceOptions...)
+	if err != nil {
+		t.Fatalf("Error starting the Selenium 4 server with JAR %q: %v", *selenium4Path, err)
+	}
+
+	hs := httptest.NewServer(seleniumtest.Handler)
+	defer hs.Close()
+	c.ServerURL = hs.URL
+
+	seleniumtest.RunCommonTests(t, c)
+	seleniumtest.RunChromeTests(t, c)
+	seleniumtest.RunW3CTests(t, c)
+
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Error stopping the Selenium 4 service: %v", err)
 	}
 }
 

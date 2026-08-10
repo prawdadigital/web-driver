@@ -4,6 +4,7 @@
 package seleniumtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -167,6 +168,158 @@ func RunCommonTests(t *testing.T, c Config) {
 	t.Run("ActiveElement", runTest(testActiveElement, c))
 	t.Run("AcceptAlert", runTest(testAcceptAlert, c))
 	t.Run("DismissAlert", runTest(testDismissAlert, c))
+}
+
+// RunW3CTests exercises the Selenium 4 / W3C-only additions: window rect, new
+// window, print-to-PDF, shadow DOM, and relative locators. These should only be
+// run against a W3C-compliant remote end (Selenium 4 or a standalone driver).
+func RunW3CTests(t *testing.T, c Config) {
+	t.Run("WindowRect", runTest(testWindowRect, c))
+	t.Run("NewWindow", runTest(testNewWindow, c))
+	t.Run("Print", runTest(testPrint, c))
+	t.Run("ShadowRoot", runTest(testShadowRoot, c))
+	t.Run("RelativeLocators", runTest(testRelativeLocators, c))
+}
+
+func testWindowRect(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	want := selenium.Rect{X: 30, Y: 40, Width: 640, Height: 480}
+	if err := wd.SetWindowRect(want); err != nil {
+		t.Fatalf("wd.SetWindowRect(%+v) returned error: %v", want, err)
+	}
+	got, err := wd.GetWindowRect()
+	if err != nil {
+		t.Fatalf("wd.GetWindowRect() returned error: %v", err)
+	}
+	// The window manager may clamp the position, so only the size is asserted.
+	if got.Width != want.Width || got.Height != want.Height {
+		t.Errorf("wd.GetWindowRect() size = %vx%v, want %vx%v", got.Width, got.Height, want.Width, want.Height)
+	}
+}
+
+func testNewWindow(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	before, err := wd.WindowHandles()
+	if err != nil {
+		t.Fatalf("wd.WindowHandles() returned error: %v", err)
+	}
+
+	win, err := wd.NewWindow(true)
+	if err != nil {
+		t.Fatalf("wd.NewWindow(true) returned error: %v", err)
+	}
+	if win.Handle == "" {
+		t.Fatalf("wd.NewWindow(true) returned an empty handle")
+	}
+
+	after, err := wd.WindowHandles()
+	if err != nil {
+		t.Fatalf("wd.WindowHandles() returned error: %v", err)
+	}
+	if len(after) != len(before)+1 {
+		t.Errorf("after NewWindow there are %d handles, want %d", len(after), len(before)+1)
+	}
+
+	// Switch to the new window, close it, and switch back to the original.
+	if err := wd.SwitchWindow(win.Handle); err != nil {
+		t.Fatalf("wd.SwitchWindow(%q) returned error: %v", win.Handle, err)
+	}
+	if err := wd.Close(); err != nil {
+		t.Fatalf("wd.Close() returned error: %v", err)
+	}
+	if err := wd.SwitchWindow(before[0]); err != nil {
+		t.Fatalf("wd.SwitchWindow(%q) returned error: %v", before[0], err)
+	}
+}
+
+func testPrint(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
+	}
+
+	pdf, err := wd.Print(selenium.PrintOptions{Orientation: selenium.LandscapeOrientation})
+	if err != nil {
+		t.Fatalf("wd.Print() returned error: %v", err)
+	}
+	if !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Errorf("wd.Print() did not return a PDF document (%d bytes)", len(pdf))
+	}
+}
+
+func testShadowRoot(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL + "/shadow"); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+
+	host, err := wd.FindElement(selenium.ByID, "shadow-host")
+	if err != nil {
+		t.Fatalf("wd.FindElement(shadow-host) returned error: %v", err)
+	}
+	root, err := host.GetShadowRoot()
+	if err != nil {
+		t.Fatalf("host.GetShadowRoot() returned error: %v", err)
+	}
+	el, err := root.FindElement(selenium.ByCSSSelector, "#shadow-content")
+	if err != nil {
+		t.Fatalf("root.FindElement(#shadow-content) returned error: %v", err)
+	}
+	text, err := el.Text()
+	if err != nil {
+		t.Fatalf("el.Text() returned error: %v", err)
+	}
+	if text != "shadow content" {
+		t.Errorf("shadow content text = %q, want %q", text, "shadow content")
+	}
+}
+
+func testRelativeLocators(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL + "/relative"); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+
+	center, err := wd.FindElement(selenium.ByID, "center")
+	if err != nil {
+		t.Fatalf("wd.FindElement(center) returned error: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		rel  selenium.RelativeBy
+		want string
+	}{
+		{"Above", selenium.With(selenium.ByCSSSelector, "div.box").Above(center), "top"},
+		{"Below", selenium.With(selenium.ByCSSSelector, "div.box").Below(center), "bottom"},
+		{"ToLeftOf", selenium.With(selenium.ByCSSSelector, "div.box").ToLeftOf(center), "left"},
+		{"ToRightOf", selenium.With(selenium.ByCSSSelector, "div.box").ToRightOf(center), "right"},
+	}
+	for _, tc := range cases {
+		el, err := wd.FindElementRelative(tc.rel)
+		if err != nil {
+			t.Errorf("%s: FindElementRelative returned error: %v", tc.name, err)
+			continue
+		}
+		id, err := el.GetAttribute("id")
+		if err != nil {
+			t.Errorf("%s: GetAttribute(id) returned error: %v", tc.name, err)
+			continue
+		}
+		if id != tc.want {
+			t.Errorf("%s: found #%s, want #%s", tc.name, id, tc.want)
+		}
+	}
 }
 
 func testStatus(t *testing.T, c Config) {
@@ -1604,16 +1757,49 @@ var alertPage = `
 </html>
 `
 
+var shadowPage = `
+<html>
+<head>
+	<title>Go Selenium Test Suite - Shadow DOM Page</title>
+</head>
+<body>
+	<div id="shadow-host"></div>
+	<script>
+		var root = document.getElementById('shadow-host').attachShadow({mode: 'open'});
+		root.innerHTML = '<span id="shadow-content">shadow content</span>';
+	</script>
+</body>
+</html>
+`
+
+var relativePage = `
+<html>
+<head>
+	<title>Go Selenium Test Suite - Relative Locators Page</title>
+	<style>.box { position: absolute; width: 50px; height: 50px; border: 1px solid black; }</style>
+</head>
+<body>
+	<div class="box" id="center" style="left:100px;top:100px">center</div>
+	<div class="box" id="top"    style="left:100px;top:20px">top</div>
+	<div class="box" id="bottom" style="left:100px;top:200px">bottom</div>
+	<div class="box" id="left"   style="left:20px;top:100px">left</div>
+	<div class="box" id="right"  style="left:200px;top:100px">right</div>
+</body>
+</html>
+`
+
 var Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	page, ok := map[string]string{
-		"/":       homePage,
-		"/other":  otherPage,
-		"/search": searchPage,
-		"/log":    logPage,
-		"/frame":  framePage,
-		"/title":  titleChangePage,
-		"/alert":  alertPage,
+		"/":         homePage,
+		"/other":    otherPage,
+		"/search":   searchPage,
+		"/log":      logPage,
+		"/frame":    framePage,
+		"/title":    titleChangePage,
+		"/alert":    alertPage,
+		"/shadow":   shadowPage,
+		"/relative": relativePage,
 	}[path]
 	if !ok {
 		http.NotFound(w, r)
