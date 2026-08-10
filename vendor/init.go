@@ -60,12 +60,6 @@ type file struct {
 
 var files = []file{
 	{
-		url:  "https://selenium-release.storage.googleapis.com/3.141/selenium-server-standalone-3.141.59.jar",
-		name: "selenium-server.jar",
-		// TODO(minusnine): reimplement hashing so that it is less annoying for maintenance.
-		// hash: "acf71b77d1b66b55db6fb0bed6d8bae2bbd481311bcbedfeff472c0d15e8f3cb",
-	},
-	{
 		url:    "https://saucelabs.com/downloads/sc-4.5.4-linux.tar.gz",
 		name:   "sauce-connect.tar.gz",
 		rename: []string{"sc-4.5.4-linux", "sauce-connect"},
@@ -197,6 +191,13 @@ func main() {
 			glog.Errorf("Unable to download Google Chrome browser: %v", err)
 		}
 		addFirefox(firefoxVersion)
+	}
+
+	// Selenium 4 publishes the standalone server as an asset named
+	// "selenium-server-<version>.jar" on its GitHub releases. The "$" anchor
+	// avoids matching the detached-signature ".jar.asc" asset.
+	if err := addLatestGithubRelease(ctx, "SeleniumHQ", "selenium", "^selenium-server-.*\\.jar$", "selenium-server.jar"); err != nil {
+		glog.Errorf("Unable to find the latest Selenium server: %s", err)
 	}
 
 	if err := addLatestGithubRelease(ctx, "SeleniumHQ", "htmlunit-driver", "htmlunit-driver-.*-jar-with-dependencies.jar", "htmlunit-driver.jar"); err != nil {

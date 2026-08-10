@@ -176,12 +176,23 @@ func executeCommand(method, url string, data []byte) (json.RawMessage, error) {
 	}
 
 	// Handle the W3C-compliant error format. In the W3C spec, the error is
-	// embedded in the 'value' field.
+	// embedded in the 'value' field. The "stacktrace" member may be either a
+	// string or a JSON array (Selenium 4 returns an array for session-creation
+	// errors), so it is decoded into a json.RawMessage to avoid an unmarshal
+	// failure that would otherwise cause the error to go undetected.
 	if len(reply.Value) > 0 {
-		respErr := new(Error)
-		if err := json.Unmarshal(reply.Value, respErr); err == nil && respErr.Err != "" {
-			respErr.HTTPCode = response.StatusCode
-			return nil, respErr
+		var w3cErr struct {
+			Err        string          `json:"error"`
+			Message    string          `json:"message"`
+			Stacktrace json.RawMessage `json:"stacktrace"`
+		}
+		if err := json.Unmarshal(reply.Value, &w3cErr); err == nil && w3cErr.Err != "" {
+			return nil, &Error{
+				Err:        w3cErr.Err,
+				Message:    w3cErr.Message,
+				Stacktrace: string(w3cErr.Stacktrace),
+				HTTPCode:   response.StatusCode,
+			}
 		}
 	}
 
