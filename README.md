@@ -48,6 +48,99 @@ Re-run this periodically to get up-to-date versions of these binaries.
 
 The API documentation is at https://godoc.org/github.com/prawdadigital/web-driver. See [the example](https://github.com/prawdadigital/web-driver/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/prawdadigital/web-driver/blob/master/sauce_test.go), [selenium](https://github.com/prawdadigital/web-driver/blob/master/webdriver_test.go) and [service](https://github.com/prawdadigital/web-driver/blob/master/selenium/service_test.go)) for better usage information.
 
+## Usage
+
+The module is a single solution for both Selenium (web browsers) and Appium 2
+(mobile), split into a contract package and implementation packages:
+
+* `github.com/prawdadigital/web-driver` (package `webdriver`) — the `WebDriver`
+  and `WebElement` interfaces plus the shared types (`Capabilities`, `Cookie`,
+  `Rect`, ...).
+* `.../selenium` — launches a local WebDriver server and connects to it.
+* `.../appium` — drives mobile devices through an Appium 2 server.
+* `.../remote` — the underlying W3C transport (`selenium` and `appium` wrap it).
+
+### Driving a browser with Selenium
+
+```go
+package main
+
+import (
+	"fmt"
+
+	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/chrome"
+	"github.com/prawdadigital/web-driver/selenium"
+)
+
+func main() {
+	const port = 4444
+
+	// Start a Selenium 4 server in the background (or use
+	// selenium.NewChromeDriverService / NewGeckoDriverService).
+	service, err := selenium.NewSeleniumService("vendor/selenium-server.jar", port)
+	if err != nil {
+		panic(err)
+	}
+	defer service.Stop()
+
+	// Connect a WebDriver session to it.
+	caps := webdriver.Capabilities{"browserName": "chrome"}
+	caps.AddChrome(chrome.Capabilities{Args: []string{"--headless=new"}})
+
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
+	if err != nil {
+		panic(err)
+	}
+	defer wd.Quit()
+
+	if err := wd.Get("https://pkg.go.dev"); err != nil {
+		panic(err)
+	}
+	title, _ := wd.Title()
+	fmt.Println(title)
+}
+```
+
+If a server is already running, skip `NewSeleniumService` and call
+`selenium.NewRemote` (or `remote.NewRemote`) against its URL directly.
+
+### Driving a mobile device with Appium 2
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/prawdadigital/web-driver/appium"
+)
+
+func main() {
+	// Build capabilities; the "appium:" prefix is applied automatically.
+	caps := appium.NewCapabilities().
+		PlatformName("Android").
+		AutomationName("UiAutomator2").
+		DeviceName("Android Emulator").
+		App("/path/to/app.apk").
+		ToCapabilities()
+
+	// Connect to a running Appium 2 server (root base path, no /wd/hub).
+	driver, err := appium.NewRemote(caps, "http://127.0.0.1:4723")
+	if err != nil {
+		panic(err)
+	}
+	defer driver.Quit()
+
+	// Mobile-specific commands, alongside every standard WebDriver method.
+	contexts, _ := driver.AvailableContexts()
+	fmt.Println(contexts)
+	if err := driver.SetOrientation(appium.Landscape); err != nil {
+		panic(err)
+	}
+}
+```
+
 ## Known Issues
 
 Any issues are usually because the underlying browser automation framework has a
