@@ -879,6 +879,43 @@ func (wd *remoteWD) ResizeWindow(name string, width, height int) error {
 	})
 }
 
+func (wd *remoteWD) GetWindowRect() (*Rect, error) {
+	url := wd.requestURL("/session/%s/window/rect", wd.id)
+	response, err := wd.execute("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value Rect })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
+	return &reply.Value, nil
+}
+
+func (wd *remoteWD) SetWindowRect(rect Rect) error {
+	return wd.voidCommand("/session/%s/window/rect", rect)
+}
+
+func (wd *remoteWD) NewWindow(tab bool) (Window, error) {
+	typ := "window"
+	if tab {
+		typ = "tab"
+	}
+	data, err := json.Marshal(map[string]string{"type": typ})
+	if err != nil {
+		return Window{}, err
+	}
+	response, err := wd.execute("POST", wd.requestURL("/session/%s/window/new", wd.id), data)
+	if err != nil {
+		return Window{}, err
+	}
+	reply := new(struct{ Value Window })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return Window{}, err
+	}
+	return reply.Value, nil
+}
+
 func (wd *remoteWD) SwitchFrame(frame interface{}) error {
 	params := map[string]interface{}{}
 	switch f := frame.(type) {
@@ -1293,6 +1330,25 @@ func (wd *remoteWD) Screenshot() ([]byte, error) {
 	return ioutil.ReadAll(decoder)
 }
 
+func (wd *remoteWD) Print(options PrintOptions) ([]byte, error) {
+	data, err := json.Marshal(options)
+	if err != nil {
+		return nil, err
+	}
+	response, err := wd.execute("POST", wd.requestURL("/session/%s/print", wd.id), data)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value string })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
+
+	// Selenium returns a base64-encoded PDF document.
+	decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewBufferString(reply.Value))
+	return ioutil.ReadAll(decoder)
+}
+
 // Condition is an alias for a type that is passed as an argument
 // for selenium.Wait(cond Condition) (error) function.
 type Condition func(wd WebDriver) (bool, error)
@@ -1589,4 +1645,50 @@ func (elem *remoteWE) Screenshot(scroll bool) ([]byte, error) {
 	buf := []byte(data)
 	decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewBuffer(buf))
 	return ioutil.ReadAll(decoder)
+}
+
+// shadowRootIdentifier is the string constant defined by the W3C specification
+// that is the key for the map that contains a unique shadow root identifier.
+const shadowRootIdentifier = "shadow-6066-11e4-a52e-4f735466cecf"
+
+func (elem *remoteWE) GetShadowRoot() (ShadowRoot, error) {
+	wd := elem.parent
+	url := wd.requestURL("/session/%s/element/%s/shadow", wd.id, elem.id)
+	response, err := wd.execute("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value map[string]string })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
+	id := reply.Value[shadowRootIdentifier]
+	if id == "" {
+		return nil, fmt.Errorf("invalid shadow root returned: %+v", reply)
+	}
+	return &remoteSR{parent: wd, id: id}, nil
+}
+
+// remoteSR is the concrete ShadowRoot implementation.
+type remoteSR struct {
+	parent *remoteWD
+	id     string
+}
+
+func (sr *remoteSR) FindElement(by, value string) (WebElement, error) {
+	url := fmt.Sprintf("/session/%%s/shadow/%s/element", sr.id)
+	response, err := sr.parent.find(by, value, "", url)
+	if err != nil {
+		return nil, err
+	}
+	return sr.parent.DecodeElement(response)
+}
+
+func (sr *remoteSR) FindElements(by, value string) ([]WebElement, error) {
+	url := fmt.Sprintf("/session/%%s/shadow/%s/element", sr.id)
+	response, err := sr.parent.find(by, value, "s", url)
+	if err != nil {
+		return nil, err
+	}
+	return sr.parent.DecodeElements(response)
 }
