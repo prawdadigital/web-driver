@@ -407,6 +407,12 @@ type WebDriver interface {
 	FindElement(by, value string) (WebElement, error)
 	// FindElement finds potentially many elements in the current page's DOM.
 	FindElements(by, value string) ([]WebElement, error)
+	// FindElementRelative finds the single element best matching a relative
+	// (spatial) locator, or an error if none match. Build the locator with With.
+	FindElementRelative(rel RelativeBy) (WebElement, error)
+	// FindElementsRelative finds all elements matching a relative (spatial)
+	// locator, sorted by proximity to the anchor. Build the locator with With.
+	FindElementsRelative(rel RelativeBy) ([]WebElement, error)
 	// ActiveElement returns the currently active element on the page.
 	ActiveElement() (WebElement, error)
 

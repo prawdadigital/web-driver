@@ -14,11 +14,11 @@ import (
 //
 // If you want to actually run this example:
 //
-//   1. Ensure the file paths at the top of the function are correct.
-//   2. Remove the word "Example" from the comment at the bottom of the
-//      function.
-//   3. Run:
-//      go test -test.run=Example$ github.com/tebeka/selenium
+//  1. Ensure the file paths at the top of the function are correct.
+//  2. Remove the word "Example" from the comment at the bottom of the
+//     function.
+//  3. Run:
+//     go test -test.run=Example$ github.com/tebeka/selenium
 func Example() {
 	// Start a Selenium WebDriver server instance (if one is not already
 	// running).

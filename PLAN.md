@@ -111,6 +111,24 @@ navigation / `FindElement` / `Text` all work.
      the unmarshal failed and a 500 was silently treated as success. Now decoded
      via `json.RawMessage`.
 
+### WS2 — Selenium 4 new W3C API — DONE (live-verified against 4.39.0)
+
+All added behind the W3C session and verified end-to-end with headless Chrome 151.
+
+- Window rect: `GetWindowRect`/`SetWindowRect` via `/session/:id/window/rect`.
+- `NewWindow(tab bool)` via `/session/:id/window/new`, returning the new handle
+  and context type (does not switch to it).
+- `Print(PrintOptions)` via `/session/:id/print`, returning decoded PDF bytes;
+  options for orientation/scale/background/margins/page-size/page-ranges.
+- Shadow DOM: `WebElement.GetShadowRoot` + `ShadowRoot` interface with
+  `FindElement`/`FindElements` via the `/shadow` endpoints.
+- Relative locators (`relative.go`): `With(by, value)` + chainable
+  `Above`/`Below`/`ToLeftOf`/`ToRightOf`/`Near`/`NearWithin`, plus
+  `FindElementRelative`/`FindElementsRelative` on the WebDriver interface.
+  Implemented by finding base candidates in Go, then running a compact JS that
+  replicates Selenium's own `relative.js` predicates and center-proximity sort
+  (verified: directional matches, chained filters, and proximity ordering).
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub
