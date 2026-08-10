@@ -16,7 +16,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mediabuyerbot/go-crx3/pb"
-	"github.com/tebeka/selenium/internal/zip"
+	"github.com/prawdadigital/web-driver/internal/zip"
 )
 
 // CapabilitiesKey is the key in the top-level Capabilities map under which
@@ -69,8 +69,11 @@ type Capabilities struct {
 	WindowTypes []string `json:"windowTypes,omitempty"`
 	// Android Chrome WebDriver path "com.android.chrome"
 	AndroidPackage string `json:"androidPackage,omitempty"`
-	// Use W3C mode, if true.
-	W3C bool `json:"w3c"`
+	// W3C requests that ChromeDriver use W3C mode, if true. When false it is
+	// omitted from the capabilities: modern ChromeDriver defaults to W3C mode,
+	// and explicitly sending "w3c": false selects the removed legacy JSON wire
+	// protocol, which Selenium 4 rejects during the session handshake.
+	W3C bool `json:"w3c,omitempty"`
 }
 
 // TODO(minusnine): https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625

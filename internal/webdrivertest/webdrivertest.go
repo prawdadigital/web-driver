@@ -1,9 +1,10 @@
-// Package seleniumtest provides tests to exercise package selenium. These
+// Package webdrivertest provides tests to exercise package webdriver. These
 // tests are in a separate package to allow other test harnesses to validate
 // their behavior.
-package seleniumtest
+package webdrivertest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -24,11 +25,12 @@ import (
 	socks5 "github.com/armon/go-socks5"
 	"github.com/blang/semver"
 	"github.com/google/go-cmp/cmp"
-	"github.com/tebeka/selenium"
-	"github.com/tebeka/selenium/chrome"
-	"github.com/tebeka/selenium/firefox"
-	"github.com/tebeka/selenium/log"
-	"github.com/tebeka/selenium/sauce"
+	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/chrome"
+	"github.com/prawdadigital/web-driver/firefox"
+	"github.com/prawdadigital/web-driver/log"
+	"github.com/prawdadigital/web-driver/sauce"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 type Config struct {
@@ -47,11 +49,11 @@ func runTest(f func(*testing.T, Config), c Config) func(*testing.T) {
 	}
 }
 
-var NewRemote = func(_ *testing.T, caps selenium.Capabilities, addr string) (selenium.WebDriver, error) {
+var NewRemote = func(_ *testing.T, caps webdriver.Capabilities, addr string) (webdriver.WebDriver, error) {
 	return selenium.NewRemote(caps, addr)
 }
 
-func newRemote(t *testing.T, caps selenium.Capabilities, c Config) selenium.WebDriver {
+func newRemote(t *testing.T, caps webdriver.Capabilities, c Config) webdriver.WebDriver {
 	wd, err := NewRemote(t, caps, c.Addr)
 	if err != nil {
 		t.Fatalf("NewRemote(%+v, %q) returned error: %v", caps, c.Addr, err)
@@ -59,8 +61,8 @@ func newRemote(t *testing.T, caps selenium.Capabilities, c Config) selenium.WebD
 	return wd
 }
 
-func newTestCapabilities(t *testing.T, c Config) selenium.Capabilities {
-	caps := selenium.Capabilities{
+func newTestCapabilities(t *testing.T, c Config) webdriver.Capabilities {
+	caps := webdriver.Capabilities{
 		"browserName": c.Browser,
 	}
 	switch c.Browser {
@@ -117,7 +119,7 @@ func newTestCapabilities(t *testing.T, c Config) selenium.Capabilities {
 	return caps
 }
 
-func quitRemote(t *testing.T, wd selenium.WebDriver) {
+func quitRemote(t *testing.T, wd webdriver.WebDriver) {
 	if err := wd.Quit(); err != nil {
 		t.Errorf("wd.Quit() returned error: %v", err)
 	}
@@ -169,6 +171,158 @@ func RunCommonTests(t *testing.T, c Config) {
 	t.Run("DismissAlert", runTest(testDismissAlert, c))
 }
 
+// RunW3CTests exercises the Selenium 4 / W3C-only additions: window rect, new
+// window, print-to-PDF, shadow DOM, and relative locators. These should only be
+// run against a W3C-compliant remote end (Selenium 4 or a standalone driver).
+func RunW3CTests(t *testing.T, c Config) {
+	t.Run("WindowRect", runTest(testWindowRect, c))
+	t.Run("NewWindow", runTest(testNewWindow, c))
+	t.Run("Print", runTest(testPrint, c))
+	t.Run("ShadowRoot", runTest(testShadowRoot, c))
+	t.Run("RelativeLocators", runTest(testRelativeLocators, c))
+}
+
+func testWindowRect(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	want := webdriver.Rect{X: 30, Y: 40, Width: 640, Height: 480}
+	if err := wd.SetWindowRect(want); err != nil {
+		t.Fatalf("wd.SetWindowRect(%+v) returned error: %v", want, err)
+	}
+	got, err := wd.GetWindowRect()
+	if err != nil {
+		t.Fatalf("wd.GetWindowRect() returned error: %v", err)
+	}
+	// The window manager may clamp the position, so only the size is asserted.
+	if got.Width != want.Width || got.Height != want.Height {
+		t.Errorf("wd.GetWindowRect() size = %vx%v, want %vx%v", got.Width, got.Height, want.Width, want.Height)
+	}
+}
+
+func testNewWindow(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	before, err := wd.WindowHandles()
+	if err != nil {
+		t.Fatalf("wd.WindowHandles() returned error: %v", err)
+	}
+
+	win, err := wd.NewWindow(true)
+	if err != nil {
+		t.Fatalf("wd.NewWindow(true) returned error: %v", err)
+	}
+	if win.Handle == "" {
+		t.Fatalf("wd.NewWindow(true) returned an empty handle")
+	}
+
+	after, err := wd.WindowHandles()
+	if err != nil {
+		t.Fatalf("wd.WindowHandles() returned error: %v", err)
+	}
+	if len(after) != len(before)+1 {
+		t.Errorf("after NewWindow there are %d handles, want %d", len(after), len(before)+1)
+	}
+
+	// Switch to the new window, close it, and switch back to the original.
+	if err := wd.SwitchWindow(win.Handle); err != nil {
+		t.Fatalf("wd.SwitchWindow(%q) returned error: %v", win.Handle, err)
+	}
+	if err := wd.Close(); err != nil {
+		t.Fatalf("wd.Close() returned error: %v", err)
+	}
+	if err := wd.SwitchWindow(before[0]); err != nil {
+		t.Fatalf("wd.SwitchWindow(%q) returned error: %v", before[0], err)
+	}
+}
+
+func testPrint(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
+	}
+
+	pdf, err := wd.Print(webdriver.PrintOptions{Orientation: webdriver.LandscapeOrientation})
+	if err != nil {
+		t.Fatalf("wd.Print() returned error: %v", err)
+	}
+	if !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Errorf("wd.Print() did not return a PDF document (%d bytes)", len(pdf))
+	}
+}
+
+func testShadowRoot(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL + "/shadow"); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+
+	host, err := wd.FindElement(webdriver.ByID, "shadow-host")
+	if err != nil {
+		t.Fatalf("wd.FindElement(shadow-host) returned error: %v", err)
+	}
+	root, err := host.GetShadowRoot()
+	if err != nil {
+		t.Fatalf("host.GetShadowRoot() returned error: %v", err)
+	}
+	el, err := root.FindElement(webdriver.ByCSSSelector, "#shadow-content")
+	if err != nil {
+		t.Fatalf("root.FindElement(#shadow-content) returned error: %v", err)
+	}
+	text, err := el.Text()
+	if err != nil {
+		t.Fatalf("el.Text() returned error: %v", err)
+	}
+	if text != "shadow content" {
+		t.Errorf("shadow content text = %q, want %q", text, "shadow content")
+	}
+}
+
+func testRelativeLocators(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL + "/relative"); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+
+	center, err := wd.FindElement(webdriver.ByID, "center")
+	if err != nil {
+		t.Fatalf("wd.FindElement(center) returned error: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		rel  webdriver.RelativeBy
+		want string
+	}{
+		{"Above", webdriver.With(webdriver.ByCSSSelector, "div.box").Above(center), "top"},
+		{"Below", webdriver.With(webdriver.ByCSSSelector, "div.box").Below(center), "bottom"},
+		{"ToLeftOf", webdriver.With(webdriver.ByCSSSelector, "div.box").ToLeftOf(center), "left"},
+		{"ToRightOf", webdriver.With(webdriver.ByCSSSelector, "div.box").ToRightOf(center), "right"},
+	}
+	for _, tc := range cases {
+		el, err := wd.FindElementRelative(tc.rel)
+		if err != nil {
+			t.Errorf("%s: FindElementRelative returned error: %v", tc.name, err)
+			continue
+		}
+		id, err := el.GetAttribute("id")
+		if err != nil {
+			t.Errorf("%s: GetAttribute(id) returned error: %v", tc.name, err)
+			continue
+		}
+		if id != tc.want {
+			t.Errorf("%s: found #%s, want #%s", tc.name, id, tc.want)
+		}
+	}
+}
+
 func testStatus(t *testing.T, c Config) {
 	wd := newRemote(t, newTestCapabilities(t, c), c)
 	defer quitRemote(t, wd)
@@ -198,21 +352,21 @@ func testError(t *testing.T, c Config) {
 	wd := newRemote(t, newTestCapabilities(t, c), c)
 	defer quitRemote(t, wd)
 
-	_, err := wd.FindElement(selenium.ByID, "no-such-element")
+	_, err := wd.FindElement(webdriver.ByID, "no-such-element")
 	if err == nil {
-		t.Fatal("wd.FindElement(selenium.ByID, 'no-such-element') did not return an error as expected")
+		t.Fatal("wd.FindElement(webdriver.ByID, 'no-such-element') did not return an error as expected")
 	}
 
-	e, ok := err.(*selenium.Error)
+	e, ok := err.(*webdriver.Error)
 	if !ok {
 		if c.SeleniumVersion.Major > 0 {
 			//			t.Skipf("Selenium does not support W3C-style errors.")
 		} else {
-			t.Fatalf("wd.FindElement(selenium.ByID, 'no-such-element') returned an error that is not an *Error: %v", err)
+			t.Fatalf("wd.FindElement(webdriver.ByID, 'no-such-element') returned an error that is not an *Error: %v", err)
 		}
 	}
 	if want := "no such element"; e.Err != want {
-		t.Errorf("wd.FindElement(selenium.ByID, 'no-such-element'); err.Err = %q, want %q", e.Err, want)
+		t.Errorf("wd.FindElement(webdriver.ByID, 'no-such-element'); err.Err = %q, want %q", e.Err, want)
 	}
 
 	// Chrome returns 404 in W3C-compatibility mode, but 200 otherwise. Firefox
@@ -220,7 +374,7 @@ func testError(t *testing.T, c Config) {
 	switch e.HTTPCode {
 	case 200, 404, 500:
 	default:
-		t.Errorf("wd.FindElement(selenium.ByID, 'no-such-element'); err.HTTPCode = %d, want non-zero", e.HTTPCode)
+		t.Errorf("wd.FindElement(webdriver.ByID, 'no-such-element'); err.HTTPCode = %d, want non-zero", e.HTTPCode)
 	}
 }
 
@@ -289,9 +443,9 @@ func testWindows(t *testing.T, c Config) {
 	}
 
 	const linkText = "other page"
-	link, err := wd.FindElement(selenium.ByLinkText, linkText)
+	link, err := wd.FindElement(webdriver.ByLinkText, linkText)
 	if err != nil {
-		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", selenium.ByLinkText, linkText, err)
+		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", webdriver.ByLinkText, linkText, err)
 	}
 
 	switch c.Browser {
@@ -299,29 +453,29 @@ func testWindows(t *testing.T, c Config) {
 		// Firefox+Geckodriver doesn't handle control characters without appending
 		// a terminating null key.
 		// https://github.com/mozilla/geckodriver/issues/665
-		newWindowModifier := selenium.ShiftKey + selenium.NullKey
+		newWindowModifier := webdriver.ShiftKey + webdriver.NullKey
 		if err := wd.SendModifier(newWindowModifier /*isDown=*/, true); err != nil {
-			t.Fatalf("wd.SendModifer(selenium.ShiftKey) returned error: %v", err)
+			t.Fatalf("wd.SendModifer(webdriver.ShiftKey) returned error: %v", err)
 		}
 		// Firefox and Geckodriver doesn't handle clicking on an element.
 		//
 		// https://github.com/mozilla/geckodriver/issues/1007
-		if err := link.SendKeys(selenium.EnterKey); err != nil {
-			t.Fatalf("link.SendKeys(selenium.EnterKey) returned error: %v", err)
+		if err := link.SendKeys(webdriver.EnterKey); err != nil {
+			t.Fatalf("link.SendKeys(webdriver.EnterKey) returned error: %v", err)
 		}
 		if err := wd.SendModifier(newWindowModifier /*isDown=*/, false); err != nil {
-			t.Fatalf("wd.SendKeys(selenium.ShiftKey) returned error: %v", err)
+			t.Fatalf("wd.SendKeys(webdriver.ShiftKey) returned error: %v", err)
 		}
 	case "htmlunit":
-		newWindowModifier := selenium.ShiftKey
+		newWindowModifier := webdriver.ShiftKey
 		if err := wd.SendModifier(newWindowModifier /*isDown=*/, true); err != nil {
-			t.Fatalf("wd.SendModifer(selenium.ShiftKey) returned error: %v", err)
+			t.Fatalf("wd.SendModifer(webdriver.ShiftKey) returned error: %v", err)
 		}
 		if err := link.Click(); err != nil {
 			t.Fatalf("link.Click() returned error: %v", err)
 		}
 		if err := wd.SendModifier(newWindowModifier /*isDown=*/, false); err != nil {
-			t.Fatalf("wd.SendKeys(selenium.ShiftKey) returned error: %v", err)
+			t.Fatalf("wd.SendKeys(webdriver.ShiftKey) returned error: %v", err)
 		}
 	case "chrome":
 		// Chrome doesn't support handling key events at the browser level.
@@ -369,14 +523,14 @@ func testWindows(t *testing.T, c Config) {
 		if err := wd.SwitchWindow(otherHandle); err != nil {
 			t.Fatalf("wd.SwitchWindow(firstHandle) returned error: %v", err)
 		}
-		if _, err := wd.FindElement(selenium.ByLinkText, linkText); err == nil {
-			t.Fatalf("wd.FindElement(%q, %q) (after opening a new window) returned nil, expected error", selenium.ByLinkText, linkText)
+		if _, err := wd.FindElement(webdriver.ByLinkText, linkText); err == nil {
+			t.Fatalf("wd.FindElement(%q, %q) (after opening a new window) returned nil, expected error", webdriver.ByLinkText, linkText)
 		}
 		if err := wd.SwitchWindow(firstHandle); err != nil {
 			t.Fatalf("wd.SwitchWindow(firstHandle) returned error: %v", err)
 		}
-		if _, err := wd.FindElement(selenium.ByLinkText, linkText); err != nil {
-			t.Fatalf("wd.FindElement(%q, %q) (after switching to the original window) returned error: %v", selenium.ByLinkText, linkText, err)
+		if _, err := wd.FindElement(webdriver.ByLinkText, linkText); err != nil {
+			t.Fatalf("wd.FindElement(%q, %q) (after switching to the original window) returned error: %v", webdriver.ByLinkText, linkText, err)
 		}
 	})
 
@@ -515,10 +669,10 @@ func testFindElement(t *testing.T, c Config) {
 	for _, tc := range []struct {
 		by, query string
 	}{
-		{selenium.ByName, "submit"},
-		{selenium.ByCSSSelector, "input[name=submit]"},
-		{selenium.ByXPATH, "/html/body/form/input[2]"},
-		{selenium.ByLinkText, "search"},
+		{webdriver.ByName, "submit"},
+		{webdriver.ByCSSSelector, "input[name=submit]"},
+		{webdriver.ByXPATH, "/html/body/form/input[2]"},
+		{webdriver.ByLinkText, "search"},
 	} {
 		t.Run(tc.by, func(t *testing.T) {
 			if err := wd.Get(c.ServerURL); err != nil {
@@ -533,7 +687,7 @@ func testFindElement(t *testing.T, c Config) {
 	}
 }
 
-func evaluateElement(t *testing.T, wd selenium.WebDriver, elem selenium.WebElement) {
+func evaluateElement(t *testing.T, wd webdriver.WebDriver, elem webdriver.WebElement) {
 	if err := elem.Click(); err != nil {
 		t.Fatalf("wd.FindElement().Click() returned error: %v", err)
 	}
@@ -555,7 +709,7 @@ func testFindElements(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	elems, err := wd.FindElements(selenium.ByName, "submit")
+	elems, err := wd.FindElements(webdriver.ByName, "submit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,12 +728,12 @@ func testSendKeys(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	input, err := wd.FindElement(selenium.ByName, "q")
+	input, err := wd.FindElement(webdriver.ByName, "q")
 	if err != nil {
 		t.Fatal(err)
 	}
 	const query = "golang"
-	if err := input.SendKeys(query + selenium.EnterKey); err != nil {
+	if err := input.SendKeys(query + webdriver.EnterKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -607,9 +761,9 @@ func testClick(t *testing.T, c Config) {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
 	const searchBoxName = "q"
-	input, err := wd.FindElement(selenium.ByName, searchBoxName)
+	input, err := wd.FindElement(webdriver.ByName, searchBoxName)
 	if err != nil {
-		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", selenium.ByName, searchBoxName, err)
+		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", webdriver.ByName, searchBoxName, err)
 	}
 	const query = "golang"
 	if err = input.SendKeys(query); err != nil {
@@ -617,17 +771,17 @@ func testClick(t *testing.T, c Config) {
 	}
 
 	const selectTag = "select"
-	sel, err := wd.FindElement(selenium.ByCSSSelector, selectTag)
+	sel, err := wd.FindElement(webdriver.ByCSSSelector, selectTag)
 	if err != nil {
-		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", selenium.ByCSSSelector, selectTag, err)
+		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", webdriver.ByCSSSelector, selectTag, err)
 	}
 	if err = sel.Click(); err != nil {
 		t.Fatalf("input.Click() returned error: %v", err)
 	}
 	time.Sleep(2 * time.Second)
-	option, err := sel.FindElement(selenium.ByID, "secondValue")
+	option, err := sel.FindElement(webdriver.ByID, "secondValue")
 	if err != nil {
-		t.Fatalf("input.FindElement(%q, %q) returned error: %v", selenium.ByID, "secondValue", err)
+		t.Fatalf("input.FindElement(%q, %q) returned error: %v", webdriver.ByID, "secondValue", err)
 	}
 	if err = option.Click(); err != nil {
 		t.Fatalf("option.Click() returned error: %v", err)
@@ -640,9 +794,9 @@ func testClick(t *testing.T, c Config) {
 	}
 
 	const buttonID = "submit"
-	button, err := wd.FindElement(selenium.ByID, buttonID)
+	button, err := wd.FindElement(webdriver.ByID, buttonID)
 	if err != nil {
-		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", selenium.ByID, buttonID, err)
+		t.Fatalf("wd.FindElement(%q, %q) returned error: %v", webdriver.ByID, buttonID, err)
 	}
 	if err := wd.SetPageLoadTimeout(2 * time.Second); err != nil {
 		t.Fatalf("wd.SetImplicitWaitTimeout() returned error: %v", err)
@@ -723,12 +877,12 @@ func testAddCookie(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	want := &selenium.Cookie{
+	want := &webdriver.Cookie{
 		Name:     "the nameless cookie",
 		Value:    "I have nothing",
 		Expiry:   math.MaxUint32,
 		Domain:   "127.0.0.1", // Unlike real browsers, htmlunit requires this to be set.
-		SameSite: selenium.SameSiteLax,
+		SameSite: webdriver.SameSiteLax,
 	}
 	if err := wd.AddCookie(want); err != nil {
 		t.Fatal(err)
@@ -747,7 +901,7 @@ func testAddCookie(t *testing.T, c Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got *selenium.Cookie
+	var got *webdriver.Cookie
 	for _, cookie := range cookies {
 		if cookie.Name == want.Name {
 			got = &cookie
@@ -805,7 +959,7 @@ func testLocation(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	button, err := wd.FindElement(selenium.ByID, "submit")
+	button, err := wd.FindElement(webdriver.ByID, "submit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -827,7 +981,7 @@ func testLocationInView(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	button, err := wd.FindElement(selenium.ByID, "submit")
+	button, err := wd.FindElement(webdriver.ByID, "submit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,7 +1003,7 @@ func testSize(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	button, err := wd.FindElement(selenium.ByID, "submit")
+	button, err := wd.FindElement(webdriver.ByID, "submit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -910,7 +1064,7 @@ func testExecuteScriptOnElement(t *testing.T, c Config) {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
 
-	input, err := wd.FindElement(selenium.ByName, "q")
+	input, err := wd.FindElement(webdriver.ByName, "q")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -920,7 +1074,7 @@ func testExecuteScriptOnElement(t *testing.T, c Config) {
 		t.Fatal(err)
 	}
 
-	we, err := wd.FindElement(selenium.ByXPATH, "//input[@type='submit']")
+	we, err := wd.FindElement(webdriver.ByXPATH, "//input[@type='submit']")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1030,7 +1184,7 @@ func testIsSelected(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	elem, err := wd.FindElement(selenium.ByID, "chuk")
+	elem, err := wd.FindElement(webdriver.ByID, "chuk")
 	if err != nil {
 		t.Fatal("Can't find element")
 	}
@@ -1065,9 +1219,9 @@ func testIsDisplayed(t *testing.T, c Config) {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
 	const id = "chuk"
-	elem, err := wd.FindElement(selenium.ByID, id)
+	elem, err := wd.FindElement(webdriver.ByID, id)
 	if err != nil {
-		t.Fatalf("wd.FindElement(selenium.ByID, %s) return error %v", id, err)
+		t.Fatalf("wd.FindElement(webdriver.ByID, %s) return error %v", id, err)
 	}
 	displayed, err := elem.IsDisplayed()
 	if err != nil {
@@ -1086,7 +1240,7 @@ func testGetAttributeNotFound(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	elem, err := wd.FindElement(selenium.ByID, "chuk")
+	elem, err := wd.FindElement(webdriver.ByID, "chuk")
 	if err != nil {
 		t.Fatal("Can't find element")
 	}
@@ -1106,7 +1260,7 @@ func testGetProperty(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	input, err := wd.FindElement(selenium.ByName, "q")
+	input, err := wd.FindElement(webdriver.ByName, "q")
 	if err != nil {
 		t.Fatalf("Can't find element: %v", err)
 	}
@@ -1134,7 +1288,7 @@ func testGetPropertyNotFound(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	elem, err := wd.FindElement(selenium.ByID, "chuk")
+	elem, err := wd.FindElement(webdriver.ByID, "chuk")
 	if err != nil {
 		t.Fatal("Can't find element")
 	}
@@ -1177,18 +1331,18 @@ func testKeyDownUp(t *testing.T, c Config) {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
 
-	e, err := wd.FindElement(selenium.ByLinkText, "other page")
+	e, err := wd.FindElement(webdriver.ByLinkText, "other page")
 	if err != nil {
 		t.Fatalf("error finding other page link: %v", err)
 	}
 
-	if err := wd.KeyDown(selenium.ControlKey); err != nil {
+	if err := wd.KeyDown(webdriver.ControlKey); err != nil {
 		t.Fatalf("error pressing control key down: %v", err)
 	}
 	if err := e.Click(); err != nil {
 		t.Fatalf("error clicking the other page link: %v", err)
 	}
-	if err := wd.KeyUp(selenium.ControlKey); err != nil {
+	if err := wd.KeyUp(webdriver.ControlKey); err != nil {
 		t.Fatalf("error releasing control key: %v", err)
 	}
 }
@@ -1204,7 +1358,7 @@ func testCSSProperty(t *testing.T, c Config) {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
 
-	e, err := wd.FindElement(selenium.ByLinkText, "other page")
+	e, err := wd.FindElement(webdriver.ByLinkText, "other page")
 	if err != nil {
 		t.Fatalf("error finding other page link: %v", err)
 	}
@@ -1259,8 +1413,8 @@ func testProxy(t *testing.T, c Config) {
 
 	t.Run("HTTP", func(t *testing.T) {
 		caps := newTestCapabilities(t, c)
-		caps.AddProxy(selenium.Proxy{
-			Type: selenium.Manual,
+		caps.AddProxy(webdriver.Proxy{
+			Type: webdriver.Manual,
 			HTTP: u.Host,
 		})
 		runTestProxy(t, c, caps)
@@ -1306,8 +1460,8 @@ func testProxy(t *testing.T, c Config) {
 		}()
 
 		caps := newTestCapabilities(t, c)
-		caps.AddProxy(selenium.Proxy{
-			Type:         selenium.Manual,
+		caps.AddProxy(webdriver.Proxy{
+			Type:         webdriver.Manual,
 			SOCKS:        l.Addr().String(),
 			SOCKSVersion: 5,
 		})
@@ -1316,7 +1470,7 @@ func testProxy(t *testing.T, c Config) {
 	})
 }
 
-func runTestProxy(t *testing.T, c Config, caps selenium.Capabilities) {
+func runTestProxy(t *testing.T, c Config, caps webdriver.Capabilities) {
 	allowProxyForLocalhost(c.Browser, caps)
 
 	wd := newRemote(t, caps, c)
@@ -1339,7 +1493,7 @@ func runTestProxy(t *testing.T, c Config, caps selenium.Capabilities) {
 	}
 }
 
-func allowProxyForLocalhost(browser string, caps selenium.Capabilities) {
+func allowProxyForLocalhost(browser string, caps webdriver.Capabilities) {
 	switch browser {
 	case "firefox":
 		// By default, Firefox explicitly does not use a proxy for connection to
@@ -1379,48 +1533,48 @@ func testSwitchFrame(t *testing.T, c Config) {
 	if err := wd.SwitchFrame(iframeID); err != nil {
 		t.Fatalf("wd.SwitchToFrame(%q) returned error: %v", iframeID, err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, insideFrameID); err != nil {
-		t.Fatalf("After switching frames using an ID, wd.FindElement(selenium.ByID, %q) returned error: %v", insideFrameID, err)
+	if _, err := wd.FindElement(webdriver.ByID, insideFrameID); err != nil {
+		t.Fatalf("After switching frames using an ID, wd.FindElement(webdriver.ByID, %q) returned error: %v", insideFrameID, err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, outsideDivID); err == nil {
-		t.Fatalf("After switching frames using an ID, wd.FindElement(selenium.ByID, %q) returned nil, expected an error", outsideDivID)
+	if _, err := wd.FindElement(webdriver.ByID, outsideDivID); err == nil {
+		t.Fatalf("After switching frames using an ID, wd.FindElement(webdriver.ByID, %q) returned nil, expected an error", outsideDivID)
 	}
 
 	// Test with nil, to return to the top-level context.
 	if err := wd.SwitchFrame(nil); err != nil {
 		t.Fatalf("wd.SwitchToFrame(nil) returned error: %v", err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, outsideDivID); err != nil {
-		t.Fatalf("After switching frames using nil, wd.FindElement(selenium.ByID, %q) returned error: %v", outsideDivID, err)
+	if _, err := wd.FindElement(webdriver.ByID, outsideDivID); err != nil {
+		t.Fatalf("After switching frames using nil, wd.FindElement(webdriver.ByID, %q) returned error: %v", outsideDivID, err)
 	}
 
 	// Test with a WebElement.
-	iframe, err := wd.FindElement(selenium.ByID, iframeID)
+	iframe, err := wd.FindElement(webdriver.ByID, iframeID)
 	if err != nil {
 		t.Fatalf("error finding iframe: %v", err)
 	}
 	if err := wd.SwitchFrame(iframe); err != nil {
 		t.Fatalf("wd.SwitchToFrame(nil) returned error: %v", err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, insideFrameID); err != nil {
-		t.Fatalf("After switching frames using a WebElement, wd.FindElement(selenium.ByID, %q) returned error: %v", insideFrameID, err)
+	if _, err := wd.FindElement(webdriver.ByID, insideFrameID); err != nil {
+		t.Fatalf("After switching frames using a WebElement, wd.FindElement(webdriver.ByID, %q) returned error: %v", insideFrameID, err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, outsideDivID); err == nil {
-		t.Fatalf("After switching frames using a WebElement, wd.FindElement(selenium.ByID, %q) returned nil, expected an error", outsideDivID)
+	if _, err := wd.FindElement(webdriver.ByID, outsideDivID); err == nil {
+		t.Fatalf("After switching frames using a WebElement, wd.FindElement(webdriver.ByID, %q) returned nil, expected an error", outsideDivID)
 	}
 
 	// Test with the empty string, to return to the top-level context.
 	if err := wd.SwitchFrame(""); err != nil {
 		t.Fatalf(`wd.SwitchToFrame("") returned error: %v`, err)
 	}
-	if _, err := wd.FindElement(selenium.ByID, outsideDivID); err != nil {
-		t.Fatalf(`After switching frames using "", wd.FindElement(selenium.ByID, %q) returned error: %v`, outsideDivID, err)
+	if _, err := wd.FindElement(webdriver.ByID, outsideDivID); err != nil {
+		t.Fatalf(`After switching frames using "", wd.FindElement(webdriver.ByID, %q) returned error: %v`, outsideDivID, err)
 	}
 }
 
 func testWait(t *testing.T, c Config) {
 	const newTitle = "Title changed."
-	titleChangeCondition := func(wd selenium.WebDriver) (bool, error) {
+	titleChangeCondition := func(wd webdriver.WebDriver) (bool, error) {
 		title, err := wd.Title()
 		if err != nil {
 			return false, err
@@ -1604,16 +1758,49 @@ var alertPage = `
 </html>
 `
 
+var shadowPage = `
+<html>
+<head>
+	<title>Go Selenium Test Suite - Shadow DOM Page</title>
+</head>
+<body>
+	<div id="shadow-host"></div>
+	<script>
+		var root = document.getElementById('shadow-host').attachShadow({mode: 'open'});
+		root.innerHTML = '<span id="shadow-content">shadow content</span>';
+	</script>
+</body>
+</html>
+`
+
+var relativePage = `
+<html>
+<head>
+	<title>Go Selenium Test Suite - Relative Locators Page</title>
+	<style>.box { position: absolute; width: 50px; height: 50px; border: 1px solid black; }</style>
+</head>
+<body>
+	<div class="box" id="center" style="left:100px;top:100px">center</div>
+	<div class="box" id="top"    style="left:100px;top:20px">top</div>
+	<div class="box" id="bottom" style="left:100px;top:200px">bottom</div>
+	<div class="box" id="left"   style="left:20px;top:100px">left</div>
+	<div class="box" id="right"  style="left:200px;top:100px">right</div>
+</body>
+</html>
+`
+
 var Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	page, ok := map[string]string{
-		"/":       homePage,
-		"/other":  otherPage,
-		"/search": searchPage,
-		"/log":    logPage,
-		"/frame":  framePage,
-		"/title":  titleChangePage,
-		"/alert":  alertPage,
+		"/":         homePage,
+		"/other":    otherPage,
+		"/search":   searchPage,
+		"/log":      logPage,
+		"/frame":    framePage,
+		"/title":    titleChangePage,
+		"/alert":    alertPage,
+		"/shadow":   shadowPage,
+		"/relative": relativePage,
 	}[path]
 	if !ok {
 		http.NotFound(w, r)
@@ -1729,7 +1916,7 @@ func testChromeExtension(t *testing.T, c Config) {
 	if err := wd.Get(c.ServerURL); err != nil {
 		t.Fatalf("wd.Get(%q) returned error: %v", c.ServerURL, err)
 	}
-	e, err := wd.FindElement(selenium.ByCSSSelector, "body")
+	e, err := wd.FindElement(webdriver.ByCSSSelector, "body")
 	if err != nil {
 		t.Fatalf("error finding body: %v", err)
 	}

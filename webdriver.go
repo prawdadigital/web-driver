@@ -1,11 +1,11 @@
-package selenium
+package webdriver
 
 import (
 	"time"
 
-	"github.com/tebeka/selenium/chrome"
-	"github.com/tebeka/selenium/firefox"
-	"github.com/tebeka/selenium/log"
+	"github.com/prawdadigital/web-driver/chrome"
+	"github.com/prawdadigital/web-driver/firefox"
+	"github.com/prawdadigital/web-driver/log"
 )
 
 // TODO(minusnine): make an enum type called FindMethod.
@@ -203,6 +203,69 @@ type Size struct {
 	Width, Height int
 }
 
+// Rect represents the position and size of a window, as used by the W3C
+// "Get Window Rect" and "Set Window Rect" commands.
+type Rect struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+// Window is a top-level browsing context (a tab or window) as returned by
+// NewWindow.
+type Window struct {
+	// Handle is the window handle, suitable for passing to SwitchWindow.
+	Handle string `json:"handle"`
+	// Type is the type of the created browsing context, either "tab" or
+	// "window". The remote end may return a different type than requested.
+	Type string `json:"type"`
+}
+
+// PrintOrientation is the page orientation used by Print.
+type PrintOrientation string
+
+// The valid page orientations.
+const (
+	PortraitOrientation  PrintOrientation = "portrait"
+	LandscapeOrientation PrintOrientation = "landscape"
+)
+
+// PrintPageSize is the paper size, in centimeters, used by Print.
+type PrintPageSize struct {
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+}
+
+// PrintMargins are the page margins, in centimeters, used by Print.
+type PrintMargins struct {
+	Top    float64 `json:"top,omitempty"`
+	Bottom float64 `json:"bottom,omitempty"`
+	Left   float64 `json:"left,omitempty"`
+	Right  float64 `json:"right,omitempty"`
+}
+
+// PrintOptions configures the W3C "Print Page" command. All fields are
+// optional; omitted fields fall back to the remote end's defaults.
+type PrintOptions struct {
+	// Orientation is the page orientation. Defaults to portrait.
+	Orientation PrintOrientation `json:"orientation,omitempty"`
+	// Scale is the page scale, between 0.1 and 2.0. Defaults to 1.0.
+	Scale float64 `json:"scale,omitempty"`
+	// Background, if true, includes background graphics. Defaults to false.
+	Background bool `json:"background,omitempty"`
+	// ShrinkToFit, if non-nil, controls whether the page is shrunk to fit the
+	// paper. Defaults to true on the remote end.
+	ShrinkToFit *bool `json:"shrinkToFit,omitempty"`
+	// Page is the paper size in centimeters. Defaults to US Letter.
+	Page *PrintPageSize `json:"page,omitempty"`
+	// Margin is the page margins in centimeters.
+	Margin *PrintMargins `json:"margin,omitempty"`
+	// PageRanges selects the pages to print, e.g. []string{"1-3", "5"}. An
+	// empty slice prints all pages.
+	PageRanges []string `json:"pageRanges,omitempty"`
+}
+
 // Cookie represents an HTTP cookie.
 type Cookie struct {
 	Name     string   `json:"name"`
@@ -318,6 +381,18 @@ type WebDriver interface {
 	// ResizeWindow changes the dimensions of a window. If the name is empty, the
 	// current window will be maximized.
 	ResizeWindow(name string, width, height int) error
+	// GetWindowRect returns the position and size of the current window. This is
+	// a W3C-only command.
+	GetWindowRect() (*Rect, error)
+	// SetWindowRect sets the position and size of the current window. This is a
+	// W3C-only command.
+	SetWindowRect(rect Rect) error
+	// NewWindow opens a new top-level browsing context and returns its handle.
+	// If tab is true a new tab is requested, otherwise a new window; the remote
+	// end may honor or ignore the request. The new context does not become the
+	// current one; use SwitchWindow with the returned handle. This is a W3C-only
+	// command.
+	NewWindow(tab bool) (Window, error)
 
 	// Get navigates the browser to the provided URL.
 	Get(url string) error
@@ -332,6 +407,12 @@ type WebDriver interface {
 	FindElement(by, value string) (WebElement, error)
 	// FindElement finds potentially many elements in the current page's DOM.
 	FindElements(by, value string) ([]WebElement, error)
+	// FindElementRelative finds the single element best matching a relative
+	// (spatial) locator, or an error if none match. Build the locator with With.
+	FindElementRelative(rel RelativeBy) (WebElement, error)
+	// FindElementsRelative finds all elements matching a relative (spatial)
+	// locator, sorted by proximity to the anchor. Build the locator with With.
+	FindElementsRelative(rel RelativeBy) ([]WebElement, error)
 	// ActiveElement returns the currently active element on the page.
 	ActiveElement() (WebElement, error)
 
@@ -396,6 +477,9 @@ type WebDriver interface {
 	KeyUp(keys string) error
 	// Screenshot takes a screenshot of the browser window.
 	Screenshot() ([]byte, error)
+	// Print renders the current page to a PDF document and returns its bytes.
+	// This is a W3C-only command.
+	Print(options PrintOptions) ([]byte, error)
 	// Log fetches the logs. Log types must be previously configured in the
 	// capabilities.
 	//
@@ -421,6 +505,14 @@ type WebDriver interface {
 	// ExecuteScriptAsyncRaw asynchronously executes a script but does not
 	// perform JSON decoding.
 	ExecuteScriptAsyncRaw(script string, args []interface{}) ([]byte, error)
+
+	// ExecuteCommand issues a raw WebDriver command against the current session
+	// and returns the raw JSON response body. path is appended to the session
+	// URL, e.g. "/appium/device/shake" targets "/session/<id>/appium/device/shake".
+	// params, if non-nil, is JSON-encoded as the request body. This is an
+	// extension point for commands outside the core WebDriver API, such as the
+	// mobile commands implemented by the appium package.
+	ExecuteCommand(method, path string, params interface{}) ([]byte, error)
 
 	// WaitWithTimeoutAndInterval waits for the condition to evaluate to true.
 	WaitWithTimeoutAndInterval(condition Condition, timeout, interval time.Duration) error
@@ -478,4 +570,17 @@ type WebElement interface {
 	CSSProperty(name string) (string, error)
 	// Screenshot takes a screenshot of the attribute scroll'ing if necessary.
 	Screenshot(scroll bool) ([]byte, error)
+	// GetShadowRoot returns the shadow root hosted by this element, through
+	// which its shadow DOM can be queried. It returns an error if the element
+	// does not host a shadow root. This is a W3C-only command.
+	GetShadowRoot() (ShadowRoot, error)
+}
+
+// ShadowRoot is the root of an element's shadow DOM. It supports finding
+// elements within the shadow tree.
+type ShadowRoot interface {
+	// FindElement finds a single element within the shadow tree.
+	FindElement(by, value string) (WebElement, error)
+	// FindElements finds potentially many elements within the shadow tree.
+	FindElements(by, value string) ([]WebElement, error)
 }

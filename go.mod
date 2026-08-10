@@ -1,4 +1,4 @@
-module github.com/tebeka/selenium
+module github.com/prawdadigital/web-driver
 
 go 1.12
 
