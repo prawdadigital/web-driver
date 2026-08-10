@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tebeka/selenium"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 // Orientation values for Orientation/SetOrientation.

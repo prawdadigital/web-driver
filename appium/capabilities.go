@@ -7,7 +7,7 @@ package appium
 import (
 	"strings"
 
-	"github.com/tebeka/selenium"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 // standardCapabilities are the W3C top-level capability names that must NOT be

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tebeka/selenium"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 // recordedRequest captures the method, path and decoded JSON body of a request

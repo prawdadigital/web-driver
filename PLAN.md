@@ -155,6 +155,19 @@ this client. A full live smoke test of the new mobile commands needs a running
 Appium 2 server + device/emulator, which is not available in this dev
 environment; the mock tests lock down the protocol in the meantime.
 
+### Restructure — dual Selenium + Appium solution — DONE
+
+- Renamed the module to `github.com/prawdadigital/web-driver` (matches the git
+  remote).
+- Moved the core client package from the repo root into `selenium/` so it sits
+  as a sibling of `appium/` (imported as
+  `github.com/prawdadigital/web-driver/selenium`). All internal imports across
+  `chrome`, `firefox`, `log`, `sauce`, `appium`, `internal/seleniumtest`, and
+  the tests were updated. `go build ./...` and `go test ./...` pass (the only
+  failing test, `TestFrameBuffer`, is Linux/Xvfb-only and skips elsewhere).
+- Updated a chrome unit test that had encoded the old `"w3c": false` behavior to
+  expect the WS1-corrected output, and added a `W3C: true` case.
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub
