@@ -1,7 +1,7 @@
 // Remote Selenium client implementation.
 // See https://www.w3.org/TR/webdriver for the protocol.
 
-package selenium
+package webdriver
 
 import (
 	"bytes"

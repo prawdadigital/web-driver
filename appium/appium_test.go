@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/prawdadigital/web-driver/selenium"
+	"github.com/prawdadigital/web-driver"
 )
 
 // recordedRequest captures the method, path and decoded JSON body of a request
@@ -69,7 +69,7 @@ func newMockServer(t *testing.T, reqs *[]recordedRequest) *httptest.Server {
 
 func newTestMobile(t *testing.T, reqs *[]recordedRequest) (Mobile, func()) {
 	srv := newMockServer(t, reqs)
-	m, err := NewRemote(selenium.Capabilities{"platformName": "Android"}, srv.URL)
+	m, err := NewRemote(webdriver.Capabilities{"platformName": "Android"}, srv.URL)
 	if err != nil {
 		srv.Close()
 		t.Fatalf("NewRemote: %v", err)

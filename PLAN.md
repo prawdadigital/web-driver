@@ -191,6 +191,33 @@ quirk when no ChromeDriver is vendored — provided on CI), and `Extension`
 (needs `testing/chrome_extension` assets absent from this repo, and headless
 Chrome cannot load extensions).
 
+### Decouple appium from selenium — contract package at the root — DONE
+
+Reworked the package boundaries so the shared vocabulary is owned by a root
+contract package rather than by `selenium`:
+
+- **root package `webdriver`** (`github.com/prawdadigital/web-driver`): the
+  `WebDriver`/`WebElement`/`ShadowRoot` interfaces, all shared value types
+  (`Capabilities`, `Cookie`, `Rect`, `PrintOptions`, ...), and the W3C HTTP
+  transport (`remote.go`, `relative.go`, `common.go`, `NewRemote`,
+  `ExecuteCommand`). Moved here from `selenium/` (`selenium.go`, `remote.go`,
+  `relative.go`, `common.go`, `doc.go`; package renamed to `webdriver`).
+- **`selenium/`**: now only service launching (`service.go`), a self-contained
+  package that imports nothing from `webdriver`.
+- **`appium/`**: imports **only** `webdriver` — no longer depends on `selenium`.
+  Its `Capabilities` builder produces `webdriver.Capabilities` and `Mobile`
+  embeds `webdriver.WebDriver`.
+- Integration tests (`TestChrome`, `TestSelenium4`, `TestFirefox`,
+  `TestHTMLUnit`, `TestSauce`, the example) moved to the repo root as
+  `package webdriver_test`; they import `selenium` for services and `webdriver`
+  for the client. This also let the WS4 `TestMain` chdir hack be removed, since
+  the tests run from the repo root again.
+
+Final dependency graph: `appium → webdriver`; `selenium` standalone;
+`webdriver → chrome/firefox/log`. Verified: `go build ./...`, all unit tests
+(`appium`, `chrome`, `sauce`, `selenium`) pass, and the live `TestSelenium4`
+W3C suite passes against Selenium 4.39.0 + headless Chrome 151.
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub

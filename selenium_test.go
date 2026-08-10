@@ -1,4 +1,4 @@
-package selenium_test
+package webdriver_test
 
 import (
 	"flag"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/golang/glog"
+	webdriver "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/internal/seleniumtest"
 	"github.com/prawdadigital/web-driver/selenium"
 )
@@ -39,18 +40,6 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
-	// The core package lives in selenium/, but the test fixtures (vendor/ and
-	// testing/) live at the repository root. `go test ./selenium/` runs with the
-	// package directory as the working directory, so move up to the repo root
-	// (identified by go.mod) to keep the repo-root-relative paths resolving.
-	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
-		if _, err := os.Stat(filepath.Join("..", "go.mod")); err == nil {
-			if err := os.Chdir(".."); err != nil {
-				fmt.Fprintf(os.Stderr, "Exiting early: unable to chdir to repo root -- %s", err)
-				os.Exit(1)
-			}
-		}
-	}
 	if err := setDriverPaths(); err != nil {
 		fmt.Fprintf(os.Stderr, "Exiting early: unable to get the driver paths -- %s", err.Error())
 		os.Exit(1)
@@ -161,7 +150,7 @@ func runChromeTests(t *testing.T, c seleniumtest.Config) {
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		selenium.SetDebug(true)
+		webdriver.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 
@@ -225,7 +214,7 @@ func TestSelenium4(t *testing.T) {
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		selenium.SetDebug(true)
+		webdriver.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 	if *javaPath != "" {
@@ -305,7 +294,7 @@ func TestHTMLUnit(t *testing.T) {
 	}
 
 	if testing.Verbose() {
-		selenium.SetDebug(true)
+		webdriver.SetDebug(true)
 	}
 
 	c := seleniumtest.Config{
@@ -345,7 +334,7 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) 
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		selenium.SetDebug(true)
+		webdriver.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 	if *javaPath != "" {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/prawdadigital/web-driver/selenium"
+	"github.com/prawdadigital/web-driver"
 )
 
 // Orientation values for Orientation/SetOrientation.
@@ -34,10 +34,10 @@ type GeoLocation struct {
 }
 
 // Mobile is a WebDriver session augmented with the Appium mobile commands. It
-// embeds selenium.WebDriver, so all standard WebDriver operations are also
+// embeds webdriver.WebDriver, so all standard WebDriver operations are also
 // available.
 type Mobile interface {
-	selenium.WebDriver
+	webdriver.WebDriver
 
 	// AvailableContexts returns the list of contexts (e.g. "NATIVE_APP" and any
 	// "WEBVIEW_*") available in the current session.
@@ -103,17 +103,17 @@ type Mobile interface {
 }
 
 // mobileWD is the concrete Mobile implementation. It wraps a standard
-// selenium.WebDriver and issues the mobile commands via ExecuteCommand.
+// webdriver.WebDriver and issues the mobile commands via ExecuteCommand.
 type mobileWD struct {
-	selenium.WebDriver
+	webdriver.WebDriver
 }
 
 // NewRemote starts a new Appium session and returns a Mobile driver. urlPrefix
 // is the base URL of the Appium server; for Appium 2 this is typically
 // "http://127.0.0.1:4444" (Appium 2 dropped the "/wd/hub" base path that
 // Appium 1 used by default).
-func NewRemote(capabilities selenium.Capabilities, urlPrefix string) (Mobile, error) {
-	wd, err := selenium.NewRemote(capabilities, urlPrefix)
+func NewRemote(capabilities webdriver.Capabilities, urlPrefix string) (Mobile, error) {
+	wd, err := webdriver.NewRemote(capabilities, urlPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func NewRemote(capabilities selenium.Capabilities, urlPrefix string) (Mobile, er
 
 // NewMobile wraps an existing WebDriver session as a Mobile driver, for callers
 // that create the session themselves.
-func NewMobile(wd selenium.WebDriver) Mobile {
+func NewMobile(wd webdriver.WebDriver) Mobile {
 	return &mobileWD{WebDriver: wd}
 }
 

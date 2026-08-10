@@ -1,4 +1,4 @@
-package selenium
+package webdriver
 
 // Relative (a.k.a. "friendly") locators, introduced in Selenium 4, find
 // elements by their spatial relationship to a known anchor element. The

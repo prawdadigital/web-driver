@@ -1,4 +1,4 @@
-package selenium_test
+package webdriver_test
 
 import (
 	"flag"
@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/blang/semver"
+	webdriver "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/internal/seleniumtest"
 	"github.com/prawdadigital/web-driver/sauce"
-	"github.com/prawdadigital/web-driver/selenium"
 )
 
 var (
@@ -24,7 +24,7 @@ func TestSauce(t *testing.T) {
 		t.Skip("Skipping Sauce tests. Enable via --experimental_sauce_tests")
 	}
 	if testing.Verbose() {
-		selenium.SetDebug(true)
+		webdriver.SetDebug(true)
 	}
 	if *sauceUserName == "" {
 		t.Fatalf("--sauce_user_name is required.")

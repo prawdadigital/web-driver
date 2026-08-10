@@ -1,4 +1,4 @@
-// Package appium provides an Appium 2 client built on top of the selenium
+// Package appium provides an Appium 2 client built on top of the webdriver
 // WebDriver client. Appium 2 speaks the W3C WebDriver protocol with mobile
 // extensions, and requires all non-standard capabilities to carry the
 // "appium:" prefix.
@@ -7,7 +7,7 @@ package appium
 import (
 	"strings"
 
-	"github.com/prawdadigital/web-driver/selenium"
+	"github.com/prawdadigital/web-driver"
 )
 
 // standardCapabilities are the W3C top-level capability names that must NOT be
@@ -28,12 +28,12 @@ var standardCapabilities = map[string]bool{
 // the "appium:" prefix required by Appium 2 to any non-standard capability, so
 // callers may pass either "deviceName" or "appium:deviceName".
 type Capabilities struct {
-	caps selenium.Capabilities
+	caps webdriver.Capabilities
 }
 
 // NewCapabilities returns an empty Appium capabilities builder.
 func NewCapabilities() *Capabilities {
-	return &Capabilities{caps: selenium.Capabilities{}}
+	return &Capabilities{caps: webdriver.Capabilities{}}
 }
 
 // Set assigns a capability, adding the "appium:" prefix unless key is a
@@ -81,8 +81,8 @@ func (c *Capabilities) BrowserName(name string) *Capabilities {
 	return c
 }
 
-// ToCapabilities returns the underlying selenium.Capabilities, suitable for
+// ToCapabilities returns the underlying webdriver.Capabilities, suitable for
 // passing to NewRemote.
-func (c *Capabilities) ToCapabilities() selenium.Capabilities {
+func (c *Capabilities) ToCapabilities() webdriver.Capabilities {
 	return c.caps
 }
