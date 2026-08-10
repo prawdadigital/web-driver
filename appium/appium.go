@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/prawdadigital/web-driver"
+	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/remote"
 )
 
 // Orientation values for Orientation/SetOrientation.
@@ -113,7 +114,7 @@ type mobileWD struct {
 // "http://127.0.0.1:4444" (Appium 2 dropped the "/wd/hub" base path that
 // Appium 1 used by default).
 func NewRemote(capabilities webdriver.Capabilities, urlPrefix string) (Mobile, error) {
-	wd, err := webdriver.NewRemote(capabilities, urlPrefix)
+	wd, err := remote.NewRemote(capabilities, urlPrefix)
 	if err != nil {
 		return nil, err
 	}

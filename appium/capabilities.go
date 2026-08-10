@@ -7,7 +7,7 @@ package appium
 import (
 	"strings"
 
-	"github.com/prawdadigital/web-driver"
+	webdriver "github.com/prawdadigital/web-driver"
 )
 
 // standardCapabilities are the W3C top-level capability names that must NOT be

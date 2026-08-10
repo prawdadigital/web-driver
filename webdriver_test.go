@@ -14,7 +14,6 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/golang/glog"
-	webdriver "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/internal/webdrivertest"
 	"github.com/prawdadigital/web-driver/selenium"
 )
@@ -150,7 +149,7 @@ func runChromeTests(t *testing.T, c webdrivertest.Config) {
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		webdriver.SetDebug(true)
+		selenium.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 
@@ -214,7 +213,7 @@ func TestSelenium4(t *testing.T) {
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		webdriver.SetDebug(true)
+		selenium.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 	if *javaPath != "" {
@@ -294,7 +293,7 @@ func TestHTMLUnit(t *testing.T) {
 	}
 
 	if testing.Verbose() {
-		webdriver.SetDebug(true)
+		selenium.SetDebug(true)
 	}
 
 	c := webdrivertest.Config{
@@ -334,7 +333,7 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c webdrivertest.Config)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
 	}
 	if testing.Verbose() {
-		webdriver.SetDebug(true)
+		selenium.SetDebug(true)
 		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
 	}
 	if *javaPath != "" {

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/prawdadigital/web-driver"
+	webdriver "github.com/prawdadigital/web-driver"
 )
 
 // recordedRequest captures the method, path and decoded JSON body of a request

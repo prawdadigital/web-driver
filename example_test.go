@@ -19,7 +19,7 @@ import (
 //  2. Remove the word "Example" from the comment at the bottom of the
 //     function.
 //  3. Run:
-//     go test -test.run=Example$ github.com/prawdadigital/web-driver/selenium
+//     go test -test.run=Example$ github.com/prawdadigital/web-driver
 func Example() {
 	// Start a Selenium WebDriver server instance (if one is not already
 	// running).
@@ -34,7 +34,7 @@ func Example() {
 		selenium.GeckoDriver(geckoDriverPath), // Specify the path to GeckoDriver in order to use Firefox.
 		selenium.Output(os.Stderr),            // Output debug information to STDERR.
 	}
-	webdriver.SetDebug(true)
+	selenium.SetDebug(true)
 	service, err := selenium.NewSeleniumService(seleniumPath, port, opts...)
 	if err != nil {
 		panic(err) // panic is used only as an example and is not otherwise recommended.
@@ -43,7 +43,7 @@ func Example() {
 
 	// Connect to the WebDriver instance running locally.
 	caps := webdriver.Capabilities{"browserName": "firefox"}
-	wd, err := webdriver.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
 	if err != nil {
 		panic(err)
 	}

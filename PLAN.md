@@ -218,6 +218,32 @@ Final dependency graph: `appium → webdriver`; `selenium` standalone;
 (`appium`, `chrome`, `sauce`, `selenium`) pass, and the live `TestSelenium4`
 W3C suite passes against Selenium 4.39.0 + headless Chrome 151.
 
+### Split contract from transport — pure-contract root + remote package — DONE
+
+Separated the interface contract from its implementation so the root package no
+longer contains the concrete transport (previously `remoteWD`/`remoteWE`
+implemented the interfaces in the same package that defined them).
+
+- **root `webdriver`**: now contract-only. Kept the interfaces + value types in
+  `webdriver.go`; extracted the remaining contract declarations out of the old
+  `remote.go` into `error.go` (`Error`), `wait.go` (`Condition` + default
+  timeouts) and `actions.go` (action constructors); `relative.go` keeps just the
+  `RelativeBy` builder plus `Root`/`Filters` accessors.
+- **new `remote/` package**: the W3C transport (`remote.go`, `common.go`,
+  `relative.go` impl). It dot-imports the root contract so the ~200 references to
+  shared types (`Capabilities`, `WebElement`, `Error`, ...) stay unqualified —
+  avoiding an error-prone mass-qualification and keeping the transport code
+  intact. `NewRemote`, `ExecuteCommand`, `DeleteSession`, `SetDebug` live here.
+- **`selenium/`**: added `client.go` with `NewRemote`/`SetDebug`/`DeleteSession`
+  convenience wrappers around `remote` (browser ergonomics).
+- **`appium/`**: now builds on `remote.NewRemote`; imports `webdriver` + `remote`,
+  still never `selenium`.
+
+Final graph: `remote → webdriver`; `selenium → webdriver + remote`;
+`appium → webdriver + remote`; `webdriver → chrome/firefox/log` (capability
+helpers only). `go build ./...`, all unit tests, and the live `TestSelenium4`
+W3C suite (Selenium 4.39.0 + headless Chrome 151) pass.
+
 ### Resolved open items
 
 - S4 server JAR: `selenium-server-<ver>.jar` from `SeleniumHQ/selenium` GitHub

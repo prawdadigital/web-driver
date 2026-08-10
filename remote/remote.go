@@ -1,7 +1,7 @@
 // Remote Selenium client implementation.
 // See https://www.w3.org/TR/webdriver for the protocol.
 
-package webdriver
+package remote
 
 import (
 	"bytes"
@@ -18,6 +18,10 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	// The contract package is dot-imported so the transport can reference the
+	// WebDriver/WebElement interfaces and shared types (Capabilities, Error,
+	// Condition, ...) unqualified. Confined to this internal implementation.
+	. "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/firefox"
 	"github.com/prawdadigital/web-driver/log"
 )
@@ -91,34 +95,6 @@ type serverReply struct {
 	State  string
 
 	Error
-}
-
-// Error contains information about a failure of a command. See the table of
-// these strings at https://www.w3.org/TR/webdriver/#handling-errors .
-//
-// This error type is only returned by servers that implement the W3C
-// specification.
-type Error struct {
-	// Err contains a general error string provided by the server.
-	Err string `json:"error"`
-	// Message is a detailed, human-readable message specific to the failure.
-	Message string `json:"message"`
-	// Stacktrace may contain the server-side stacktrace where the error occurred.
-	Stacktrace string `json:"stacktrace"`
-	// HTTPCode is the HTTP status code returned by the server.
-	HTTPCode int
-	// LegacyCode is the "Response Status Code" defined in the legacy Selenium
-	// WebDriver JSON wire protocol. This code is only produced by older
-	// Selenium WebDriver versions, Chromedriver, and InternetExplorerDriver.
-	LegacyCode int
-}
-
-// TODO(minusnine): Make Stacktrace more descriptive. Selenium emits a list of
-// objects that enumerate various fields. This is not standard, though.
-
-// Error implements the error interface.
-func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.Err, e.Message)
 }
 
 // execute performs an HTTP request and inspects the returned data for an error
@@ -1145,67 +1121,6 @@ func (wd *remoteWD) KeyUp(keys string) error {
 	return wd.keyAction("keyUp", keys)
 }
 
-// KeyPauseAction builds a KeyAction which pauses for the supplied duration.
-func KeyPauseAction(duration time.Duration) KeyAction {
-	return KeyAction{
-		"type":     "pause",
-		"duration": uint(duration / time.Millisecond),
-	}
-}
-
-// KeyUpAction builds a KeyAction press.
-func KeyUpAction(key string) KeyAction {
-	return KeyAction{
-		"type":  "keyUp",
-		"value": key,
-	}
-}
-
-// KeyDownAction builds a KeyAction which presses and holds
-// the specified key.
-func KeyDownAction(key string) KeyAction {
-	return KeyAction{
-		"type":  "keyDown",
-		"value": key,
-	}
-}
-
-// PointerPause builds a PointerAction which pauses for the supplied duration.
-func PointerPauseAction(duration time.Duration) PointerAction {
-	return PointerAction{
-		"type":     "pause",
-		"duration": uint(duration / time.Millisecond),
-	}
-}
-
-// PointerMove builds a PointerAction which moves the pointer.
-func PointerMoveAction(duration time.Duration, offset Point, origin PointerMoveOrigin) PointerAction {
-	return PointerAction{
-		"type":     "pointerMove",
-		"duration": uint(duration / time.Millisecond),
-		"origin":   origin,
-		"x":        offset.X,
-		"y":        offset.Y,
-	}
-}
-
-// PointerUp builds an action which releases the specified pointer key.
-func PointerUpAction(button MouseButton) PointerAction {
-	return PointerAction{
-		"type":   "pointerUp",
-		"button": button,
-	}
-}
-
-// PointerDown builds a PointerAction which presses
-// and holds the specified pointer key.
-func PointerDownAction(button MouseButton) PointerAction {
-	return PointerAction{
-		"type":   "pointerDown",
-		"button": button,
-	}
-}
-
 func (wd *remoteWD) StoreKeyActions(inputID string, actions ...KeyAction) {
 	rawActions := []map[string]interface{}{}
 	for _, action := range actions {
@@ -1362,19 +1277,6 @@ func (wd *remoteWD) Print(options PrintOptions) ([]byte, error) {
 	decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewBufferString(reply.Value))
 	return ioutil.ReadAll(decoder)
 }
-
-// Condition is an alias for a type that is passed as an argument
-// for selenium.Wait(cond Condition) (error) function.
-type Condition func(wd WebDriver) (bool, error)
-
-const (
-	// DefaultWaitInterval is the default polling interval for selenium.Wait
-	// function.
-	DefaultWaitInterval = 100 * time.Millisecond
-
-	// DefaultWaitTimeout is the default timeout for selenium.Wait function.
-	DefaultWaitTimeout = 60 * time.Second
-)
 
 func (wd *remoteWD) WaitWithTimeoutAndInterval(condition Condition, timeout, interval time.Duration) error {
 	startTime := time.Now()

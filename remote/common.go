@@ -1,4 +1,4 @@
-package webdriver
+package remote
 
 import (
 	"log"
