@@ -180,6 +180,46 @@ func RunW3CTests(t *testing.T, c Config) {
 	t.Run("Print", runTest(testPrint, c))
 	t.Run("ShadowRoot", runTest(testShadowRoot, c))
 	t.Run("RelativeLocators", runTest(testRelativeLocators, c))
+	t.Run("WheelScroll", runTest(testWheelScroll, c))
+}
+
+func testWheelScroll(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+	// Make the page taller than the viewport so it can scroll.
+	if _, err := wd.ExecuteScript("document.body.style.height = '3000px'; return null;", nil); err != nil {
+		t.Fatalf("ExecuteScript(grow page) returned error: %v", err)
+	}
+
+	// A non-zero duration is required: with duration 0 the compositor-driven
+	// scroll is not applied in headless Chrome.
+	wd.StoreWheelActions("wheel1", webdriver.ScrollAction(250*time.Millisecond, webdriver.FromViewport, 10, 10, 0, 400))
+	if err := wd.PerformActions(); err != nil {
+		t.Fatalf("PerformActions() returned error: %v", err)
+	}
+
+	// The scroll settles asynchronously; poll briefly for the offset to move.
+	var offset float64
+	for i := 0; i < 20; i++ {
+		res, err := wd.ExecuteScript("return Math.round(window.pageYOffset);", nil)
+		if err != nil {
+			t.Fatalf("ExecuteScript(pageYOffset) returned error: %v", err)
+		}
+		if v, ok := res.(float64); ok {
+			offset = v
+			if offset > 0 {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if offset <= 0 {
+		t.Errorf("after wheel scroll, window.pageYOffset = %v, want > 0", offset)
+	}
 }
 
 func testWindowRect(t *testing.T, c Config) {

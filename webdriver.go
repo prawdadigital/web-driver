@@ -315,7 +315,11 @@ type KeyAction map[string]interface{}
 // PointerAction represents an activity involving a pointer.
 type PointerAction map[string]interface{}
 
-// Actions stores KeyActions and PointerActions for later execution.
+// WheelAction represents an activity involving a scroll wheel.
+type WheelAction map[string]interface{}
+
+// Actions stores KeyActions, PointerActions and WheelActions for later
+// execution.
 type Actions []map[string]interface{}
 
 // WebDriver defines methods supported by WebDriver drivers.
@@ -456,6 +460,11 @@ type WebDriver interface {
 	// and future actions, the value can be set to any valid string
 	// and used to refer to this specific device in future calls.
 	StorePointerActions(inputID string, pointer PointerType, actions ...PointerAction)
+
+	// StoreWheelActions stores provided scroll-wheel actions until they are
+	// executed by PerformActions or released by ReleaseActions. inputID is a
+	// unique virtual device identifier, as for StoreKeyActions.
+	StoreWheelActions(inputID string, actions ...WheelAction)
 
 	// PerformActions executes actions previously stored by calls to StorePointerActions and StoreKeyActions.
 	PerformActions() error

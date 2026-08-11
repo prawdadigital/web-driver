@@ -1146,6 +1146,18 @@ func (wd *remoteWD) StorePointerActions(inputID string, pointer PointerType, act
 	})
 }
 
+func (wd *remoteWD) StoreWheelActions(inputID string, actions ...WheelAction) {
+	rawActions := []map[string]interface{}{}
+	for _, action := range actions {
+		rawActions = append(rawActions, action)
+	}
+	wd.storedActions = append(wd.storedActions, map[string]interface{}{
+		"type":    "wheel",
+		"id":      inputID,
+		"actions": rawActions,
+	})
+}
+
 func (wd *remoteWD) PerformActions() error {
 	err := wd.voidCommand("/session/%s/actions", map[string]interface{}{
 		"actions": wd.storedActions,
