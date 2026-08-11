@@ -16,7 +16,7 @@ var (
 	enableSauce      = flag.Bool("experimental_enable_sauce", false, "If true, perform integration tests on SauceLabs remote infrastructure.")
 	sauceUserName    = flag.String("sauce_user_name", "", "The username to use for SauceLabs.")
 	sauceAccessKey   = flag.String("sauce_access_key", "", "The access key to use for SauceLabs.")
-	sauceConnectPath = flag.String("sauce_connect_path", "vendor/sauce-connect/bin/sc", "The path to the Sauce Connect binary.")
+	sauceConnectPath = flag.String("sauce_connect_path", "internal/browsers/sauce-connect/bin/sc", "The path to the Sauce Connect binary.")
 )
 
 func TestSauce(t *testing.T) {

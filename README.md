@@ -57,7 +57,7 @@ func main() {
 
 	// Start a Selenium 4 server in the background (or use
 	// selenium.NewChromeDriverService / NewGeckoDriverService).
-	service, err := selenium.NewSeleniumService("vendor/selenium-server.jar", port)
+	service, err := selenium.NewSeleniumService("internal/browsers/selenium-server.jar", port)
 	if err != nil {
 		panic(err)
 	}
@@ -138,10 +138,10 @@ wrappers over Appium `mobile:` gesture commands plus a generic `ExecuteMobile`.
 ## Downloading dependencies (for testing)
 
 A helper downloads the Selenium 4 server JAR, ChromeDriver, GeckoDriver, and the
-Sauce Connect proxy into `vendor/`:
+Sauce Connect proxy into `internal/browsers/`:
 
 ```
-cd vendor
+cd internal/browsers
 go run init.go --alsologtostderr --download_browsers --download_latest
 cd ..
 ```

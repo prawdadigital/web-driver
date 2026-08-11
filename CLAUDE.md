@@ -33,13 +33,13 @@ gofmt -l .                                       # Check formatting (required be
 
 The integration tests (`TestChrome`, `TestSelenium4`, `TestFirefox`, `TestHTMLUnit`, `TestSauce`) live in the root package as `package webdriver_test`; they import `selenium` for service launching and `webdriver` for the client.
 
-Tests require WebDriver binaries. Download them into `vendor/` for testing:
+Tests require WebDriver binaries. Download them into `internal/browsers/` for testing:
 
 ```bash
-cd vendor && go run init.go --alsologtostderr --download_browsers --download_latest && cd ..
+cd internal/browsers && go run init.go --alsologtostderr --download_browsers --download_latest && cd ..
 ```
 
-`vendor/init.go` fetches the latest Selenium 4 server JAR (from SeleniumHQ GitHub releases), ChromeDriver, GeckoDriver, and HTMLUnit. Local Selenium/HTMLUnit testing also needs `xvfb` and a JRE (`sudo apt-get install xvfb openjdk-11-jre`); `TestFrameBuffer` requires `Xvfb` and only runs on Linux. Tests default to headless Chrome/Firefox; pass `--start_frame_buffer` to use an Xvfb server instead.
+`internal/browsers/init.go` fetches the latest Selenium 4 server JAR (from SeleniumHQ GitHub releases), ChromeDriver, GeckoDriver, and HTMLUnit. Local Selenium/HTMLUnit testing also needs `xvfb` and a JRE (`sudo apt-get install xvfb openjdk-11-jre`); `TestFrameBuffer` requires `Xvfb` and only runs on Linux. Tests default to headless Chrome/Firefox; pass `--start_frame_buffer` to use an Xvfb server instead.
 
 ## Architecture
 
@@ -65,7 +65,7 @@ The typical usage flow: start a `selenium.Service` → call `selenium.NewRemote`
 
 - **`internal/webdrivertest/`** — the shared subtest bodies (import `webdriver` for contract types, `selenium` for `NewRemote`/`ServiceOption`). The top-level `TestChrome`/`TestSelenium4`/`TestFirefox*`/`TestHTMLUnit` functions in the root `webdriver_test.go` (`package webdriver_test`) each set up a driver and run this common suite (`RunCommonTests`, plus `RunChromeTests`/`RunW3CTests`) against it.
 - **`internal/zip/`** — zip helpers used when packaging extensions/profiles.
-- **`vendor/init.go`** — a standalone `main` binary (not module deps) that downloads browsers, drivers, and JARs for tests.
+- **`internal/browsers/init.go`** — a standalone `main` binary (not module deps) that downloads browsers, drivers, and JARs for tests.
 - **`testing/`** — Dockerfile and scripts for the `--docker` hermetic test path.
 
 ## Conventions
