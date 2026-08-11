@@ -1,4 +1,10 @@
-// Package firefox provides Firefox-specific types for WebDriver.
+// Package firefox provides Firefox-specific capability types for the WebDriver
+// client.
+//
+// The central type is Capabilities, which is injected into a
+// webdriver.Capabilities map under CapabilitiesKey ("moz:firefoxOptions") to
+// configure the Firefox binary, command-line arguments, profile, logging, and
+// preferences for a geckodriver session.
 package firefox
 
 import (
@@ -29,8 +35,8 @@ type Capabilities struct {
 	Profile string `json:"profile,omitempty"`
 	// Log specifies the logging options for Gecko.
 	Log *Log `json:"log,omitempty"`
-	// Map of preference name to preference value, which can be a string, a
-	// boolean or an integer.
+	// Prefs is a map of preference name to preference value, which can be a
+	// string, a boolean or an integer.
 	Prefs map[string]interface{} `json:"prefs,omitempty"`
 }
 

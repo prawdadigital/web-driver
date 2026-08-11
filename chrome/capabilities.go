@@ -1,4 +1,14 @@
 // Package chrome provides Chrome-specific options for WebDriver.
+//
+// The central type is Capabilities, a typed representation of the
+// "goog:chromeOptions" object understood by ChromeDriver. It is meant to be
+// stored in the top-level webdriver.Capabilities map under CapabilitiesKey.
+// The package also provides helpers for packaging local Chrome extensions into
+// the CRX3 format that ChromeDriver accepts (AddExtension,
+// AddUnpackedExtension, NewExtension, and NewExtensionWithKey).
+//
+// See https://sites.google.com/a/chromium.org/chromedriver/capabilities for
+// the authoritative list of supported options.
 package chrome
 
 import (
@@ -67,7 +77,8 @@ type Capabilities struct {
 	// window handles. For access to <webview> elements, include "webview" in
 	// this list.
 	WindowTypes []string `json:"windowTypes,omitempty"`
-	// Android Chrome WebDriver path "com.android.chrome"
+	// AndroidPackage is the package name of the Chrome (or WebView) app to
+	// automate on Android, e.g. "com.android.chrome".
 	AndroidPackage string `json:"androidPackage,omitempty"`
 	// W3C requests that ChromeDriver use W3C mode, if true. When false it is
 	// omitted from the capabilities: modern ChromeDriver defaults to W3C mode,
