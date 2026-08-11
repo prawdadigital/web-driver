@@ -54,11 +54,40 @@ var NewRemote = func(_ *testing.T, caps webdriver.Capabilities, addr string) (we
 }
 
 func newRemote(t *testing.T, caps webdriver.Capabilities, c Config) webdriver.WebDriver {
-	wd, err := NewRemote(t, caps, c.Addr)
-	if err != nil {
-		t.Fatalf("NewRemote(%+v, %q) returned error: %v", caps, c.Addr, err)
+	// geckodriver/Firefox (and occasionally other drivers) can fail to start on
+	// a cold start with a transient "Process unexpectedly closed" error; retry a
+	// couple of times before giving up so the suite is not flaky.
+	var wd webdriver.WebDriver
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		wd, err = NewRemote(t, caps, c.Addr)
+		if err == nil {
+			return wd
+		}
+		if !isTransientSessionError(err) {
+			break
+		}
+		t.Logf("NewRemote attempt %d failed with a transient error, retrying: %v", attempt, err)
+		time.Sleep(time.Second)
 	}
-	return wd
+	t.Fatalf("NewRemote(%+v, %q) returned error: %v", caps, c.Addr, err)
+	return nil
+}
+
+// isTransientSessionError reports whether a NewRemote error looks like a
+// transient driver/browser cold-start failure that is worth retrying.
+func isTransientSessionError(err error) bool {
+	msg := err.Error()
+	for _, marker := range []string{
+		"Process unexpectedly closed",
+		"Failed to decode response from marionette",
+		"Failed to read marionette port",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func newTestCapabilities(t *testing.T, c Config) webdriver.Capabilities {
@@ -732,14 +761,21 @@ func evaluateElement(t *testing.T, wd webdriver.WebDriver, elem webdriver.WebEle
 		t.Fatalf("wd.FindElement().Click() returned error: %v", err)
 	}
 
-	u, err := wd.CurrentURL()
-	if err != nil {
-		t.Fatalf("wd.CurrentURL() returned error: %v", err)
+	// The click submits a form, which navigates asynchronously; poll the URL
+	// for a short while rather than reading it once and racing the navigation.
+	var u string
+	for i := 0; i < 20; i++ {
+		var err error
+		u, err = wd.CurrentURL()
+		if err != nil {
+			t.Fatalf("wd.CurrentURL() returned error: %v", err)
+		}
+		if strings.Contains(u, "/search") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-
-	if !strings.Contains(u, "/search") {
-		t.Fatalf("After element click, got URL %q, want /search", u)
-	}
+	t.Fatalf("After element click, got URL %q, want /search", u)
 }
 
 func testFindElements(t *testing.T, c Config) {

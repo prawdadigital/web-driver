@@ -57,13 +57,16 @@ retired). Add a GitHub Actions workflow: `go build ./...`, `gofmt -l`, `go vet`,
 and unit tests (`appium`/`chrome`/`sauce`/`selenium`), plus an optional Linux
 Selenium 4 integration job. Update or drop the README badges.
 
-### WS8 — Test-suite hardening
-Address the pre-existing/environmental issues surfaced by `TestSelenium4`:
-- `FindElement/css_selector` click-then-check-URL race — add an explicit wait.
-- `AddCookie` cookie-field diff on recent Chrome — reconcile expectations.
-- `Proxy/SOCKS` — Selenium Manager `--proxy` quirk when no ChromeDriver is
-  vendored; vendor a driver in CI or gate the test.
-- `go vet`: `internal/webdrivertest` "Fatalf from a non-test goroutine".
+### WS8 — Test-suite hardening — DONE (core)
+- Added a bounded session-creation retry in the shared `newRemote` helper for
+  transient geckodriver/Firefox cold-start failures ("Process unexpectedly
+  closed", marionette decode/port errors). Verified the Firefox W3C suite passes.
+- Fixed the `FindElement/css_selector` click-then-check-URL race by polling the
+  URL after the form-submitting click. Verified on Chrome.
+- (Earlier) fixed the `go vet` "Fatalf from a non-test goroutine".
+- Left as environmental (need CI/device to reproduce reliably): the `AddCookie`
+  cookie-field diff on very recent Chrome and the `Proxy/SOCKS` Selenium Manager
+  `--proxy` quirk when no ChromeDriver is vendored.
 
 ### WS9 — Desktop / native "regular" apps (optional)
 The client is protocol-generic, so it can already reach Appium desktop drivers
