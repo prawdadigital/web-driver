@@ -39,7 +39,19 @@ occasionally fails session creation on a cold start ("Process unexpectedly
 closed with status 0"); it passes on retry, so this is environmental flakiness,
 not a client bug (candidate for WS8 hardening / a session-creation retry).
 
-### WS7 — CI/CD modernization
+### Documentation & test hardening for pkg.go.dev — DONE
+Preparing the library for publication on pkg.go.dev.
+- Added an MIT LICENSE (upstream copyright preserved) so the license is
+  recognized.
+- godoc comments on all exported symbols; expanded package docs across packages.
+- Reworked the README for the four-package layout with runnable examples, a
+  feature list, and a pkg.go.dev badge.
+- Raised unit-test coverage from ~0% to: webdriver 97%, firefox 91%, zip 81%,
+  chrome 75%, remote 67% (httptest transport suite), appium 59%, selenium 22%,
+  sauce 13% (the low two are mostly process-launching code needing external
+  binaries). `go build`, `gofmt`, and `go vet ./...` are all clean.
+
+### WS7 — CI/CD modernization (deferred)
 The Travis badge/config is stale (points at `tebeka`, and travis-ci.org is
 retired). Add a GitHub Actions workflow: `go build ./...`, `gofmt -l`, `go vet`,
 and unit tests (`appium`/`chrome`/`sauce`/`selenium`), plus an optional Linux
