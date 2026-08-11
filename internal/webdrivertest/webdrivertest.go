@@ -1257,11 +1257,12 @@ func testLog(t *testing.T, c Config) {
 	switch {
 	case c.Browser == "htmlunit":
 		t.Skip("Skipping on htmlunit")
-	case c.Browser == "firefox" && (c.SeleniumVersion.Major == 3 || c.SeleniumVersion.Major == 0):
-		// Log is not supported on Firefox with Selenium 3.
+	case c.Browser == "firefox":
+		// geckodriver does not implement the log command on any version: the W3C
+		// spec dropped the logging API in favor of BiDi log events.
 		// https://github.com/w3c/webdriver/issues/406
 		// https://github.com/mozilla/geckodriver/issues/284
-		t.Skip("The log interface is not supported on Firefox, since it is not yet part of the W3C spec.")
+		t.Skip("The log command is not supported by geckodriver (Firefox).")
 	}
 	caps := newTestCapabilities(t, c)
 	caps.SetLogLevel(log.Browser, log.All)

@@ -496,7 +496,9 @@ type WebDriver interface {
 	// Log fetches the logs. Log types must be previously configured in the
 	// capabilities.
 	//
-	// NOTE: will return an error (not implemented) on IE11 or Edge drivers.
+	// NOTE: the log command is a non-standard ChromeDriver extension. The W3C
+	// WebDriver spec removed logging (in favor of BiDi log events), so this
+	// returns an error on geckodriver (Firefox), IE11, and Edge.
 	Log(typ log.Type) ([]log.Message, error)
 
 	// DismissAlert dismisses current alert.
