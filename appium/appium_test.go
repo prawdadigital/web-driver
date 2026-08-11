@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
 )
@@ -272,5 +273,67 @@ func TestCapabilitiesPrefix(t *testing.T) {
 	}
 	if _, ok := caps["appium:goog:chromeOptions"]; ok {
 		t.Errorf("caps double-prefixed a vendor capability")
+	}
+}
+
+func TestGestures(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	// lastActionSources returns the input-source list of the most recent POST
+	// to the /actions endpoint.
+	lastActionSources := func() []interface{} {
+		last := reqs[len(reqs)-1]
+		if last.method != "POST" || last.path != "/session/sess-1/actions" {
+			t.Fatalf("expected POST /session/sess-1/actions, got %s %s", last.method, last.path)
+		}
+		srcs, ok := last.body["actions"].([]interface{})
+		if !ok {
+			t.Fatalf("actions payload missing 'actions' array: %v", last.body)
+		}
+		return srcs
+	}
+	actionTypes := func(src interface{}) []string {
+		var types []string
+		for _, a := range src.(map[string]interface{})["actions"].([]interface{}) {
+			types = append(types, a.(map[string]interface{})["type"].(string))
+		}
+		return types
+	}
+
+	// Tap: one touch pointer performing move/down/pause/up.
+	if err := m.Tap(10, 20); err != nil {
+		t.Fatalf("Tap: %v", err)
+	}
+	srcs := lastActionSources()
+	if len(srcs) != 1 {
+		t.Fatalf("Tap: got %d input sources, want 1", len(srcs))
+	}
+	src0 := srcs[0].(map[string]interface{})
+	if src0["type"] != "pointer" {
+		t.Errorf("Tap source type = %v, want pointer", src0["type"])
+	}
+	if pt := src0["parameters"].(map[string]interface{})["pointerType"]; pt != "touch" {
+		t.Errorf("Tap pointerType = %v, want touch", pt)
+	}
+	if got, want := actionTypes(srcs[0]), []string{"pointerMove", "pointerDown", "pause", "pointerUp"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Tap action types = %v, want %v", got, want)
+	}
+
+	// Swipe: move/down/move/up.
+	if err := m.Swipe(0, 0, 100, 200, 200*time.Millisecond); err != nil {
+		t.Fatalf("Swipe: %v", err)
+	}
+	if got, want := actionTypes(lastActionSources()[0]), []string{"pointerMove", "pointerDown", "pointerMove", "pointerUp"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Swipe action types = %v, want %v", got, want)
+	}
+
+	// Zoom: two touch pointers performed together.
+	if err := m.Zoom(50, 50, 40, 200*time.Millisecond); err != nil {
+		t.Fatalf("Zoom: %v", err)
+	}
+	if srcs := lastActionSources(); len(srcs) != 2 {
+		t.Errorf("Zoom: got %d input sources, want 2", len(srcs))
 	}
 }

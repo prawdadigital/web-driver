@@ -3,6 +3,7 @@ package appium
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/remote"
@@ -101,6 +102,22 @@ type Mobile interface {
 	Settings() (map[string]interface{}, error)
 	// UpdateSettings applies the given Appium session settings.
 	UpdateSettings(settings map[string]interface{}) error
+
+	// Tap performs a single-finger tap at the viewport coordinates (x, y).
+	Tap(x, y int) error
+	// DoubleTap performs two quick taps at (x, y).
+	DoubleTap(x, y int) error
+	// LongPress presses at (x, y) and holds for the given duration.
+	LongPress(x, y int, duration time.Duration) error
+	// Swipe drags one finger from (startX, startY) to (endX, endY) over the
+	// given duration.
+	Swipe(startX, startY, endX, endY int, duration time.Duration) error
+	// Zoom performs a two-finger zoom-in (pinch open) centered at (x, y): the
+	// fingers start near the center and move radius pixels apart horizontally.
+	Zoom(x, y, radius int, duration time.Duration) error
+	// Pinch performs a two-finger zoom-out (pinch close) centered at (x, y): the
+	// fingers start radius pixels apart horizontally and move toward the center.
+	Pinch(x, y, radius int, duration time.Duration) error
 }
 
 // mobileWD is the concrete Mobile implementation. It wraps a standard
