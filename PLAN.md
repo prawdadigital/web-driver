@@ -14,17 +14,20 @@ the package restructure (pure-contract `webdriver` root + `remote` transport +
 
 Proposed workstreams, in priority order (reprioritize as needed):
 
-### WS5 — Input actions & gestures
+### WS5 — Input actions & gestures — DONE
 The biggest functional gap identified after Phase 1.
-- **Wheel actions** (`webdriver`): add the W3C "wheel" input source — a
-  `WheelAction` type + `ScrollAction` constructor + `StoreWheelActions`, or a
-  higher-level `ScrollBy`/`ScrollToElement`. Live-verify in Chrome.
-- **Gesture helpers** (`appium.Mobile`): `Tap`, `LongPress`, `Swipe`, `Scroll`,
-  `Pinch`/`Zoom`, built on W3C touch pointer actions so they work driver-agnostically.
-- **Appium `mobile:` command wrappers**: typed helpers over
-  `ExecuteScript("mobile: ...", args)` for the common gestures
-  (`swipeGesture`, `scrollGesture`, `longClickGesture`, `dragGesture`, `pinchOpen/CloseGesture`).
-- Decide the split: pure-W3C gestures vs. `mobile:`-based; document which each driver supports.
+- **WS5a — Wheel actions** (`webdriver` + `remote`): `WheelAction` type,
+  `StoreWheelActions`, and `ScrollAction`/`WheelPauseAction` constructors.
+  Live-verified in Chrome (`TestSelenium4/WheelScroll`); a non-zero duration is
+  required or headless Chrome does not apply the scroll.
+- **WS5b — Touch gesture helpers** (`appium.Mobile`): `Tap`, `DoubleTap`,
+  `LongPress`, `Swipe`, `Zoom`, `Pinch`, built on W3C touch pointer actions
+  (driver-agnostic; multi-finger uses two synchronized input sources).
+  Mock-tested wire format.
+- **WS5c — `mobile:` gesture wrappers** (`appium.Mobile`): generic
+  `ExecuteMobile(command, options)` plus typed UiAutomator2 wrappers
+  (`SwipeGesture`, `ScrollGesture`, `PinchOpen/CloseGesture`, `LongClickGesture`).
+  Mock-tested `/execute/sync` payload.
 
 ### WS6 — Firefox / GeckoDriver on Selenium 4
 Phase 1 live testing focused on Chrome. Validate the W3C path with Firefox:
