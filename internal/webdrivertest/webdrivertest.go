@@ -54,11 +54,40 @@ var NewRemote = func(_ *testing.T, caps webdriver.Capabilities, addr string) (we
 }
 
 func newRemote(t *testing.T, caps webdriver.Capabilities, c Config) webdriver.WebDriver {
-	wd, err := NewRemote(t, caps, c.Addr)
-	if err != nil {
-		t.Fatalf("NewRemote(%+v, %q) returned error: %v", caps, c.Addr, err)
+	// geckodriver/Firefox (and occasionally other drivers) can fail to start on
+	// a cold start with a transient "Process unexpectedly closed" error; retry a
+	// couple of times before giving up so the suite is not flaky.
+	var wd webdriver.WebDriver
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		wd, err = NewRemote(t, caps, c.Addr)
+		if err == nil {
+			return wd
+		}
+		if !isTransientSessionError(err) {
+			break
+		}
+		t.Logf("NewRemote attempt %d failed with a transient error, retrying: %v", attempt, err)
+		time.Sleep(time.Second)
 	}
-	return wd
+	t.Fatalf("NewRemote(%+v, %q) returned error: %v", caps, c.Addr, err)
+	return nil
+}
+
+// isTransientSessionError reports whether a NewRemote error looks like a
+// transient driver/browser cold-start failure that is worth retrying.
+func isTransientSessionError(err error) bool {
+	msg := err.Error()
+	for _, marker := range []string{
+		"Process unexpectedly closed",
+		"Failed to decode response from marionette",
+		"Failed to read marionette port",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func newTestCapabilities(t *testing.T, c Config) webdriver.Capabilities {
@@ -180,6 +209,46 @@ func RunW3CTests(t *testing.T, c Config) {
 	t.Run("Print", runTest(testPrint, c))
 	t.Run("ShadowRoot", runTest(testShadowRoot, c))
 	t.Run("RelativeLocators", runTest(testRelativeLocators, c))
+	t.Run("WheelScroll", runTest(testWheelScroll, c))
+}
+
+func testWheelScroll(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+	// Make the page taller than the viewport so it can scroll.
+	if _, err := wd.ExecuteScript("document.body.style.height = '3000px'; return null;", nil); err != nil {
+		t.Fatalf("ExecuteScript(grow page) returned error: %v", err)
+	}
+
+	// A non-zero duration is required: with duration 0 the compositor-driven
+	// scroll is not applied in headless Chrome.
+	wd.StoreWheelActions("wheel1", webdriver.ScrollAction(250*time.Millisecond, webdriver.FromViewport, 10, 10, 0, 400))
+	if err := wd.PerformActions(); err != nil {
+		t.Fatalf("PerformActions() returned error: %v", err)
+	}
+
+	// The scroll settles asynchronously; poll briefly for the offset to move.
+	var offset float64
+	for i := 0; i < 20; i++ {
+		res, err := wd.ExecuteScript("return Math.round(window.pageYOffset);", nil)
+		if err != nil {
+			t.Fatalf("ExecuteScript(pageYOffset) returned error: %v", err)
+		}
+		if v, ok := res.(float64); ok {
+			offset = v
+			if offset > 0 {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if offset <= 0 {
+		t.Errorf("after wheel scroll, window.pageYOffset = %v, want > 0", offset)
+	}
 }
 
 func testWindowRect(t *testing.T, c Config) {
@@ -381,20 +450,19 @@ func testError(t *testing.T, c Config) {
 // TODO(ekg): does this method work anymore in any browser? It is not part of
 // the W3C standard.
 func testCapabilities(t *testing.T, c Config) {
-	if c.Browser == "firefox" {
-		t.Skip("This method is not supported by Geckodriver.")
-	}
-	t.Skip("This method crashes Chrome?")
 	wd := newRemote(t, newTestCapabilities(t, c), c)
 	defer quitRemote(t, wd)
 
+	// Capabilities are captured from the new-session response, so this works on
+	// both Chrome and Firefox under W3C (the old legacy GET /session/:id did not).
 	caps, err := wd.Capabilities()
 	if err != nil {
 		t.Fatalf("wd.Capabilities() returned error: %v", err)
 	}
 
-	if strings.ToLower(caps["browserName"].(string)) != c.Browser {
-		t.Fatalf("bad browser name - %s (should be %s)", caps["browserName"], c.Browser)
+	name, ok := caps["browserName"].(string)
+	if !ok || strings.ToLower(name) != c.Browser {
+		t.Fatalf("Capabilities browserName = %v, want %q", caps["browserName"], c.Browser)
 	}
 }
 
@@ -692,14 +760,21 @@ func evaluateElement(t *testing.T, wd webdriver.WebDriver, elem webdriver.WebEle
 		t.Fatalf("wd.FindElement().Click() returned error: %v", err)
 	}
 
-	u, err := wd.CurrentURL()
-	if err != nil {
-		t.Fatalf("wd.CurrentURL() returned error: %v", err)
+	// The click submits a form, which navigates asynchronously; poll the URL
+	// for a short while rather than reading it once and racing the navigation.
+	var u string
+	for i := 0; i < 20; i++ {
+		var err error
+		u, err = wd.CurrentURL()
+		if err != nil {
+			t.Fatalf("wd.CurrentURL() returned error: %v", err)
+		}
+		if strings.Contains(u, "/search") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-
-	if !strings.Contains(u, "/search") {
-		t.Fatalf("After element click, got URL %q, want /search", u)
-	}
+	t.Fatalf("After element click, got URL %q, want /search", u)
 }
 
 func testFindElements(t *testing.T, c Config) {
@@ -1451,7 +1526,9 @@ func testProxy(t *testing.T, c Config) {
 			default:
 			}
 			if err != nil {
-				t.Fatalf("s.ListenAndServe(_) returned error: %v", err)
+				// Errorf (not Fatalf) is used because this runs on a separate
+				// goroutine, where Fatalf's runtime.Goexit would not work.
+				t.Errorf("socks.Serve(_) returned error: %v", err)
 			}
 		}()
 		defer func() {

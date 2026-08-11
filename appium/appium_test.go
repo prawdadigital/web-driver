@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
 )
@@ -272,5 +273,197 @@ func TestCapabilitiesPrefix(t *testing.T) {
 	}
 	if _, ok := caps["appium:goog:chromeOptions"]; ok {
 		t.Errorf("caps double-prefixed a vendor capability")
+	}
+}
+
+func TestGestures(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	// lastActionSources returns the input-source list of the most recent POST
+	// to the /actions endpoint.
+	lastActionSources := func() []interface{} {
+		last := reqs[len(reqs)-1]
+		if last.method != "POST" || last.path != "/session/sess-1/actions" {
+			t.Fatalf("expected POST /session/sess-1/actions, got %s %s", last.method, last.path)
+		}
+		srcs, ok := last.body["actions"].([]interface{})
+		if !ok {
+			t.Fatalf("actions payload missing 'actions' array: %v", last.body)
+		}
+		return srcs
+	}
+	actionTypes := func(src interface{}) []string {
+		var types []string
+		for _, a := range src.(map[string]interface{})["actions"].([]interface{}) {
+			types = append(types, a.(map[string]interface{})["type"].(string))
+		}
+		return types
+	}
+
+	// Tap: one touch pointer performing move/down/pause/up.
+	if err := m.Tap(10, 20); err != nil {
+		t.Fatalf("Tap: %v", err)
+	}
+	srcs := lastActionSources()
+	if len(srcs) != 1 {
+		t.Fatalf("Tap: got %d input sources, want 1", len(srcs))
+	}
+	src0 := srcs[0].(map[string]interface{})
+	if src0["type"] != "pointer" {
+		t.Errorf("Tap source type = %v, want pointer", src0["type"])
+	}
+	if pt := src0["parameters"].(map[string]interface{})["pointerType"]; pt != "touch" {
+		t.Errorf("Tap pointerType = %v, want touch", pt)
+	}
+	if got, want := actionTypes(srcs[0]), []string{"pointerMove", "pointerDown", "pause", "pointerUp"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Tap action types = %v, want %v", got, want)
+	}
+
+	// Swipe: move/down/move/up.
+	if err := m.Swipe(0, 0, 100, 200, 200*time.Millisecond); err != nil {
+		t.Fatalf("Swipe: %v", err)
+	}
+	if got, want := actionTypes(lastActionSources()[0]), []string{"pointerMove", "pointerDown", "pointerMove", "pointerUp"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Swipe action types = %v, want %v", got, want)
+	}
+
+	// Zoom: two touch pointers performed together.
+	if err := m.Zoom(50, 50, 40, 200*time.Millisecond); err != nil {
+		t.Fatalf("Zoom: %v", err)
+	}
+	if srcs := lastActionSources(); len(srcs) != 2 {
+		t.Errorf("Zoom: got %d input sources, want 2", len(srcs))
+	}
+}
+
+func TestMobileGestures(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	lastExec := func() (script string, arg0 map[string]interface{}) {
+		last := reqs[len(reqs)-1]
+		if last.method != "POST" || last.path != "/session/sess-1/execute/sync" {
+			t.Fatalf("expected POST /session/sess-1/execute/sync, got %s %s", last.method, last.path)
+		}
+		script, _ = last.body["script"].(string)
+		args, ok := last.body["args"].([]interface{})
+		if !ok || len(args) != 1 {
+			t.Fatalf("execute args = %v, want a single options element", last.body["args"])
+		}
+		arg0, _ = args[0].(map[string]interface{})
+		return script, arg0
+	}
+
+	if err := m.SwipeGesture(webdriver.Rect{X: 0, Y: 10, Width: 200, Height: 300}, "up", 0.75); err != nil {
+		t.Fatalf("SwipeGesture: %v", err)
+	}
+	script, opts := lastExec()
+	if script != "mobile: swipeGesture" {
+		t.Errorf("script = %q, want %q", script, "mobile: swipeGesture")
+	}
+	if opts["direction"] != "up" || opts["percent"].(float64) != 0.75 {
+		t.Errorf("swipe opts direction/percent = %v/%v", opts["direction"], opts["percent"])
+	}
+	if opts["width"].(float64) != 200 || opts["height"].(float64) != 300 {
+		t.Errorf("swipe opts width/height = %v/%v, want 200/300", opts["width"], opts["height"])
+	}
+
+	if err := m.LongClickGesture(15, 25, 800*time.Millisecond); err != nil {
+		t.Fatalf("LongClickGesture: %v", err)
+	}
+	script, opts = lastExec()
+	if script != "mobile: longClickGesture" {
+		t.Errorf("script = %q, want %q", script, "mobile: longClickGesture")
+	}
+	if opts["x"].(float64) != 15 || opts["duration"].(float64) != 800 {
+		t.Errorf("longClick opts x/duration = %v/%v, want 15/800", opts["x"], opts["duration"])
+	}
+
+	// Generic escape hatch.
+	if _, err := m.ExecuteMobile("scrollBackTo", map[string]interface{}{"elementId": "e1"}); err != nil {
+		t.Fatalf("ExecuteMobile: %v", err)
+	}
+	if script, opts := lastExec(); script != "mobile: scrollBackTo" || opts["elementId"] != "e1" {
+		t.Errorf("ExecuteMobile sent script=%q opts=%v", script, opts)
+	}
+}
+
+func TestNativeAndDesktopCapabilities(t *testing.T) {
+	// Windows desktop app.
+	win := NewCapabilities().
+		PlatformName(PlatformWindows).
+		AutomationName(AutomationWindows).
+		App("Root").
+		ToCapabilities()
+	if win["platformName"] != "Windows" || win["appium:automationName"] != "Windows" || win["appium:app"] != "Root" {
+		t.Errorf("windows caps = %v", win)
+	}
+
+	// macOS desktop app by bundle id.
+	mac := NewCapabilities().
+		PlatformName(PlatformMac).
+		AutomationName(AutomationMac2).
+		BundleID("com.apple.TextEdit").
+		ToCapabilities()
+	if mac["platformName"] != "Mac" || mac["appium:automationName"] != "Mac2" || mac["appium:bundleId"] != "com.apple.TextEdit" {
+		t.Errorf("mac caps = %v", mac)
+	}
+
+	// Android native app by package/activity.
+	android := NewCapabilities().
+		PlatformName(PlatformAndroid).
+		AutomationName(AutomationUiAutomator2).
+		AppPackage("com.example").
+		AppActivity(".MainActivity").
+		ToCapabilities()
+	if android["appium:appPackage"] != "com.example" || android["appium:appActivity"] != ".MainActivity" {
+		t.Errorf("android caps = %v", android)
+	}
+}
+
+func TestExecuteExtension(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	last := func() (string, map[string]interface{}) {
+		r := reqs[len(reqs)-1]
+		if r.method != "POST" || r.path != "/session/sess-1/execute/sync" {
+			t.Fatalf("expected POST /execute/sync, got %s %s", r.method, r.path)
+		}
+		script, _ := r.body["script"].(string)
+		args, _ := r.body["args"].([]interface{})
+		if len(args) != 1 {
+			t.Fatalf("args = %v, want one element", r.body["args"])
+		}
+		opts, _ := args[0].(map[string]interface{})
+		return script, opts
+	}
+
+	// Windows driver uses the "windows:" prefix; the command is sent verbatim.
+	if _, err := m.ExecuteExtension("windows: click", map[string]interface{}{"elementId": "e1"}); err != nil {
+		t.Fatalf("ExecuteExtension(windows:): %v", err)
+	}
+	if script, opts := last(); script != "windows: click" || opts["elementId"] != "e1" {
+		t.Errorf("windows ext sent script=%q opts=%v", script, opts)
+	}
+
+	// Mac2 driver uses the "macos:" prefix.
+	if _, err := m.ExecuteExtension("macos: launchApp", map[string]interface{}{"bundleId": "com.apple.TextEdit"}); err != nil {
+		t.Fatalf("ExecuteExtension(macos:): %v", err)
+	}
+	if script, _ := last(); script != "macos: launchApp" {
+		t.Errorf("macos ext script = %q", script)
+	}
+
+	// ExecuteMobile remains a "mobile:" shorthand over ExecuteExtension.
+	if _, err := m.ExecuteMobile("shell", map[string]interface{}{"command": "ls"}); err != nil {
+		t.Fatalf("ExecuteMobile: %v", err)
+	}
+	if script, _ := last(); script != "mobile: shell" {
+		t.Errorf("ExecuteMobile script = %q, want mobile: shell", script)
 	}
 }

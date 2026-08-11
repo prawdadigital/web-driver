@@ -4,8 +4,8 @@ sauce.json
 t.go
 selenium-server-standalone-*.jar
 chromedriver*
-vendor/*
-!vendor/*.go
+internal/browsers/*
+!internal/browsers/*.go
 coverage.txt
 coverage.out
 .idea/*

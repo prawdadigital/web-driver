@@ -3,6 +3,7 @@ package appium
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
 	"github.com/prawdadigital/web-driver/remote"
@@ -101,7 +102,59 @@ type Mobile interface {
 	Settings() (map[string]interface{}, error)
 	// UpdateSettings applies the given Appium session settings.
 	UpdateSettings(settings map[string]interface{}) error
+
+	// Tap performs a single-finger tap at the viewport coordinates (x, y).
+	Tap(x, y int) error
+	// DoubleTap performs two quick taps at (x, y).
+	DoubleTap(x, y int) error
+	// LongPress presses at (x, y) and holds for the given duration.
+	LongPress(x, y int, duration time.Duration) error
+	// Swipe drags one finger from (startX, startY) to (endX, endY) over the
+	// given duration.
+	Swipe(startX, startY, endX, endY int, duration time.Duration) error
+	// Zoom performs a two-finger zoom-in (pinch open) centered at (x, y): the
+	// fingers start near the center and move radius pixels apart horizontally.
+	Zoom(x, y, radius int, duration time.Duration) error
+	// Pinch performs a two-finger zoom-out (pinch close) centered at (x, y): the
+	// fingers start radius pixels apart horizontally and move toward the center.
+	Pinch(x, y, radius int, duration time.Duration) error
+
+	// ExecuteExtension invokes an Appium extension command given verbatim,
+	// including its vendor prefix, e.g. "windows: click" (Windows driver),
+	// "macos: launchApp" (Mac2 driver), or "mobile: swipeGesture". options is
+	// passed as the single script argument. This is the general escape hatch for
+	// driver-specific commands across mobile and desktop.
+	ExecuteExtension(command string, options map[string]interface{}) (interface{}, error)
+
+	// ExecuteMobile invokes an Appium "mobile:" extension command (e.g.
+	// "swipeGesture") with the given options and returns its raw result. It is a
+	// shorthand for ExecuteExtension("mobile: "+command, options). The set of
+	// commands and options depends on the Appium driver (UiAutomator2,
+	// XCUITest, ...); see the driver's documentation.
+	ExecuteMobile(command string, options map[string]interface{}) (interface{}, error)
+
+	// The following are typed wrappers for the UiAutomator2 gesture commands,
+	// operating over a screen-area rectangle. For element-scoped gestures, other
+	// drivers, or other options, use ExecuteMobile directly.
+
+	// SwipeGesture swipes within area in direction ("up"/"down"/"left"/"right")
+	// covering the given percent (0.0-1.0) of the area.
+	SwipeGesture(area webdriver.Rect, direction string, percent float64) error
+	// ScrollGesture scrolls within area in direction ("up"/"down"/"left"/"right")
+	// covering the given percent (0.0-1.0) of the area.
+	ScrollGesture(area webdriver.Rect, direction string, percent float64) error
+	// PinchOpenGesture performs a zoom-in within area by the given percent.
+	PinchOpenGesture(area webdriver.Rect, percent float64) error
+	// PinchCloseGesture performs a zoom-out within area by the given percent.
+	PinchCloseGesture(area webdriver.Rect, percent float64) error
+	// LongClickGesture long-presses at (x, y) for the given duration.
+	LongClickGesture(x, y int, duration time.Duration) error
 }
+
+// Driver is an alias for Mobile. It reads more naturally when the Appium session
+// drives a native desktop application (Windows or macOS) rather than a mobile
+// device; the two names are fully interchangeable.
+type Driver = Mobile
 
 // mobileWD is the concrete Mobile implementation. It wraps a standard
 // webdriver.WebDriver and issues the mobile commands via ExecuteCommand.

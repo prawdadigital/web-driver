@@ -52,8 +52,12 @@ var remoteErrors = map[int]string{
 
 type remoteWD struct {
 	id, urlPrefix string
-	capabilities  Capabilities
-	w3cCompatible bool
+	// capabilities are the desired/requested capabilities passed to NewRemote.
+	capabilities Capabilities
+	// returnedCapabilities are the capabilities the remote end actually granted,
+	// captured from the new-session response (W3C has no get-capabilities command).
+	returnedCapabilities Capabilities
+	w3cCompatible        bool
 	// storedActions stores KeyActions and PointerActions for later execution.
 	storedActions  Actions
 	browser        string
@@ -489,6 +493,25 @@ func (wd *remoteWD) NewSession() (string, error) {
 				caps = value.returnedCapabilities
 			}
 
+			// Capture the full capability set the remote end granted so that
+			// Capabilities() can report it without an extra request: the W3C
+			// protocol has no get-capabilities command. W3C returns them under
+			// the "capabilities" key; legacy servers return them at the top level.
+			if wd.w3cCompatible {
+				var w3c struct {
+					Capabilities Capabilities `json:"capabilities"`
+				}
+				if err := json.Unmarshal(reply.Value, &w3c); err == nil {
+					wd.returnedCapabilities = w3c.Capabilities
+				}
+			} else {
+				var legacy Capabilities
+				if err := json.Unmarshal(reply.Value, &legacy); err == nil {
+					delete(legacy, "sessionId")
+					wd.returnedCapabilities = legacy
+				}
+			}
+
 			for _, s := range []string{caps.Version, caps.BrowserVersion} {
 				if s == "" {
 					continue
@@ -524,7 +547,22 @@ func (wd *remoteWD) SwitchSession(sessionID string) error {
 	return nil
 }
 
+// Capabilities returns the capabilities the remote end granted for this
+// session, as captured from the new-session response. The W3C WebDriver
+// protocol does not define a command to query capabilities after session
+// creation, so no request is made in that (default) case. For legacy JSON Wire
+// servers that never returned capabilities on creation, it falls back to the
+// legacy GET /session/:id command.
 func (wd *remoteWD) Capabilities() (Capabilities, error) {
+	if wd.returnedCapabilities != nil {
+		return wd.returnedCapabilities, nil
+	}
+	if wd.w3cCompatible {
+		// A W3C session always returns capabilities on creation; an empty set
+		// here means the server sent none, and there is no command to ask again.
+		return Capabilities{}, nil
+	}
+
 	url := wd.requestURL("/session/%s", wd.id)
 	response, err := wd.execute("GET", url, nil)
 	if err != nil {
@@ -1146,6 +1184,18 @@ func (wd *remoteWD) StorePointerActions(inputID string, pointer PointerType, act
 	})
 }
 
+func (wd *remoteWD) StoreWheelActions(inputID string, actions ...WheelAction) {
+	rawActions := []map[string]interface{}{}
+	for _, action := range actions {
+		rawActions = append(rawActions, action)
+	}
+	wd.storedActions = append(wd.storedActions, map[string]interface{}{
+		"type":    "wheel",
+		"id":      inputID,
+		"actions": rawActions,
+	})
+}
+
 func (wd *remoteWD) PerformActions() error {
 	err := wd.voidCommand("/session/%s/actions", map[string]interface{}{
 		"actions": wd.storedActions,
@@ -1476,14 +1526,14 @@ func (elem *remoteWE) location(suffix string) (*Point, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Point{round(reply.Value.X), round(reply.Value.Y)}, nil
+		return &Point{X: round(reply.Value.X), Y: round(reply.Value.Y)}, nil
 	}
 
 	rect, err := elem.rect()
 	if err != nil {
 		return nil, err
 	}
-	return &Point{round(rect.X), round(rect.Y)}, nil
+	return &Point{X: round(rect.X), Y: round(rect.Y)}, nil
 }
 
 func (elem *remoteWE) Location() (*Point, error) {
@@ -1506,7 +1556,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Size{round(reply.Value.Width), round(reply.Value.Height)}, nil
+		return &Size{Width: round(reply.Value.Width), Height: round(reply.Value.Height)}, nil
 	}
 
 	rect, err := elem.rect()
@@ -1514,7 +1564,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		return nil, err
 	}
 
-	return &Size{round(rect.Width), round(rect.Height)}, nil
+	return &Size{Width: round(rect.Width), Height: round(rect.Height)}, nil
 }
 
 type rect struct {

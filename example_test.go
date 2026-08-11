@@ -25,8 +25,8 @@ func Example() {
 	// running).
 	const (
 		// These paths will be different on your system.
-		seleniumPath    = "vendor/selenium-server-standalone-3.4.jar"
-		geckoDriverPath = "vendor/geckodriver-v0.18.0-linux64"
+		seleniumPath    = "internal/browsers/selenium-server-standalone-3.4.jar"
+		geckoDriverPath = "internal/browsers/geckodriver-v0.18.0-linux64"
 		port            = 8080
 	)
 	opts := []selenium.ServiceOption{

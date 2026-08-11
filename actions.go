@@ -62,3 +62,30 @@ func PointerDownAction(button MouseButton) PointerAction {
 		"button": button,
 	}
 }
+
+// WheelPauseAction builds a WheelAction which pauses for the supplied duration.
+func WheelPauseAction(duration time.Duration) WheelAction {
+	return WheelAction{
+		"type":     "pause",
+		"duration": uint(duration / time.Millisecond),
+	}
+}
+
+// ScrollAction builds a WheelAction which scrolls by (deltaX, deltaY) pixels
+// over the given duration. The scroll begins at the point (x, y) relative to
+// origin, which is either FromViewport (the default when nil) or a WebElement
+// to scroll from the center of.
+func ScrollAction(duration time.Duration, origin interface{}, x, y, deltaX, deltaY int) WheelAction {
+	if origin == nil {
+		origin = FromViewport
+	}
+	return WheelAction{
+		"type":     "scroll",
+		"duration": uint(duration / time.Millisecond),
+		"origin":   origin,
+		"x":        x,
+		"y":        y,
+		"deltaX":   deltaX,
+		"deltaY":   deltaY,
+	}
+}

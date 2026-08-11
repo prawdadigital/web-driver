@@ -1,4 +1,8 @@
-// Package log provides logging-related configuration types and constants.
+// Package log provides logging-related configuration types and constants
+// used to request and describe WebDriver log output. Its Type and Level
+// constants populate a Capabilities map (keyed by CapabilitiesKey) in the
+// session capabilities, and Message describes a single log entry returned by
+// the driver.
 package log
 
 import "time"
@@ -46,7 +50,10 @@ type Capabilities map[Type]Level
 
 // Message is a log message returned from the Log method.
 type Message struct {
+	// Timestamp is the time at which the entry was recorded.
 	Timestamp time.Time
-	Level     Level
-	Message   string
+	// Level is the severity of the entry.
+	Level Level
+	// Message is the human-readable text of the entry.
+	Message string
 }

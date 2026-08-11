@@ -1,3 +1,14 @@
+// Package selenium launches and manages local WebDriver server subprocesses
+// (the Selenium 4 standalone JAR, ChromeDriver, and GeckoDriver) and provides
+// thin NewRemote/SetDebug/DeleteSession convenience wrappers around the remote
+// package for the common browser case.
+//
+// The typical flow is to start a *Service with NewSeleniumService,
+// NewChromeDriverService, or NewGeckoDriverService, connect to its address with
+// NewRemote, drive the returned webdriver.WebDriver, and finally call
+// Service.Stop. ServiceOption functional options customize a Service before it
+// starts, and FrameBuffer optionally runs an X virtual frame buffer (Xvfb) for
+// headed browsers on Linux.
 package selenium
 
 import (
