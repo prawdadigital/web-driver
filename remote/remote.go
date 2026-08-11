@@ -1091,25 +1091,55 @@ func (wd *remoteWD) DeleteCookie(name string) error {
 }
 
 // TODO(minusnine): add a test for Click.
-func (wd *remoteWD) Click(button int) error {
-	return wd.voidCommand("/session/%s/click", map[string]int{
-		"button": button,
+// performPointer issues a one-off mouse pointer action sequence via the W3C
+// /actions endpoint, without disturbing any actions queued by StorePointerActions.
+func (wd *remoteWD) performPointer(inputID string, actions ...PointerAction) error {
+	raw := make([]map[string]interface{}, len(actions))
+	for i, a := range actions {
+		raw[i] = a
+	}
+	return wd.voidCommand("/session/%s/actions", map[string]interface{}{
+		"actions": []map[string]interface{}{{
+			"type":       "pointer",
+			"id":         inputID,
+			"parameters": map[string]string{"pointerType": "mouse"},
+			"actions":    raw,
+		}},
 	})
 }
 
-// TODO(minusnine): add a test for DoubleClick.
+func (wd *remoteWD) Click(button int) error {
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/click", map[string]int{"button": button})
+	}
+	return wd.performPointer("mouse",
+		PointerDownAction(MouseButton(button)),
+		PointerUpAction(MouseButton(button)),
+	)
+}
+
 func (wd *remoteWD) DoubleClick() error {
-	return wd.voidCommand("/session/%s/doubleclick", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/doubleclick", nil)
+	}
+	return wd.performPointer("mouse",
+		PointerDownAction(LeftButton), PointerUpAction(LeftButton),
+		PointerDownAction(LeftButton), PointerUpAction(LeftButton),
+	)
 }
 
-// TODO(minusnine): add a test for ButtonDown.
 func (wd *remoteWD) ButtonDown() error {
-	return wd.voidCommand("/session/%s/buttondown", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/buttondown", nil)
+	}
+	return wd.performPointer("mouse", PointerDownAction(LeftButton))
 }
 
-// TODO(minusnine): add a test for ButtonUp.
 func (wd *remoteWD) ButtonUp() error {
-	return wd.voidCommand("/session/%s/buttonup", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/buttonup", nil)
+	}
+	return wd.performPointer("mouse", PointerUpAction(LeftButton))
 }
 
 func (wd *remoteWD) SendModifier(modifier string, isDown bool) error {
@@ -1435,9 +1465,24 @@ func (elem *remoteWE) Text() (string, error) {
 	return elem.parent.stringCommand(urlTemplate)
 }
 
+// submitScript submits the form containing (or being) the given element. W3C
+// WebDriver removed the element/submit command, so this mirrors what the
+// official Selenium clients do. It calls the methods off HTMLFormElement's
+// prototype because a named control (e.g. <input name="submit">) shadows the
+// form's own submit/requestSubmit properties. requestSubmit is preferred so the
+// submit event fires, with a fallback to submit for older engines.
+const submitScript = `var form = arguments[0].closest('form');
+if (!form) { throw new Error('element is not within a form'); }
+var proto = HTMLFormElement.prototype;
+if (typeof proto.requestSubmit === 'function') { proto.requestSubmit.call(form); }
+else { proto.submit.call(form); }`
+
 func (elem *remoteWE) Submit() error {
-	urlTemplate := fmt.Sprintf("/session/%%s/element/%s/submit", elem.id)
-	return elem.parent.voidCommand(urlTemplate, nil)
+	if !elem.parent.w3cCompatible {
+		return elem.parent.voidCommand(fmt.Sprintf("/session/%%s/element/%s/submit", elem.id), nil)
+	}
+	_, err := elem.parent.ExecuteScript(submitScript, []interface{}{elem})
+	return err
 }
 
 func (elem *remoteWE) Clear() error {
@@ -1446,11 +1491,22 @@ func (elem *remoteWE) Clear() error {
 }
 
 func (elem *remoteWE) MoveTo(xOffset, yOffset int) error {
-	return elem.parent.voidCommand("/session/%s/moveto", map[string]interface{}{
-		"element": elem.id,
-		"xoffset": xOffset,
-		"yoffset": yOffset,
-	})
+	if !elem.parent.w3cCompatible {
+		return elem.parent.voidCommand("/session/%s/moveto", map[string]interface{}{
+			"element": elem.id,
+			"xoffset": xOffset,
+			"yoffset": yOffset,
+		})
+	}
+	// W3C moves the pointer relative to the center of the origin element.
+	move := PointerAction{
+		"type":     "pointerMove",
+		"duration": uint(0),
+		"origin":   elem,
+		"x":        xOffset,
+		"y":        yOffset,
+	}
+	return elem.parent.performPointer("mouse", move)
 }
 
 func (elem *remoteWE) FindElement(by, value string) (WebElement, error) {
