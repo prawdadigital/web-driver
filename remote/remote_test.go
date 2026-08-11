@@ -719,15 +719,23 @@ func TestScreenshot(t *testing.T) {
 func TestCapabilitiesAndStatusID(t *testing.T) {
 	m := newMockServer(t)
 	defer m.close()
-	m.values["/session/sess-1"] = map[string]interface{}{"browserName": "chrome"}
 
 	wd := newTestDriver(t, m)
 	caps, err := wd.Capabilities()
 	if err != nil {
 		t.Fatalf("Capabilities returned error: %v", err)
 	}
-	if caps["browserName"] != "chrome" {
-		t.Errorf("Capabilities = %v", caps)
+	// Capabilities are captured from the new-session response (the W3C protocol
+	// has no get-capabilities command), so both browserName and the negotiated
+	// browserVersion are present.
+	if caps["browserName"] != "chrome" || caps["browserVersion"] != "120.0.1" {
+		t.Errorf("Capabilities = %v, want browserName=chrome browserVersion=120.0.1", caps)
+	}
+	// Capabilities() must not issue the legacy GET /session/:id request on W3C.
+	for _, r := range m.reqs {
+		if r.method == "GET" && r.path == "/session/sess-1" {
+			t.Errorf("Capabilities() made a legacy GET /session/sess-1 request")
+		}
 	}
 	if err := wd.SwitchSession("other"); err != nil {
 		t.Fatalf("SwitchSession returned error: %v", err)

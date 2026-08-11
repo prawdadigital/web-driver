@@ -450,20 +450,19 @@ func testError(t *testing.T, c Config) {
 // TODO(ekg): does this method work anymore in any browser? It is not part of
 // the W3C standard.
 func testCapabilities(t *testing.T, c Config) {
-	if c.Browser == "firefox" {
-		t.Skip("This method is not supported by Geckodriver.")
-	}
-	t.Skip("This method crashes Chrome?")
 	wd := newRemote(t, newTestCapabilities(t, c), c)
 	defer quitRemote(t, wd)
 
+	// Capabilities are captured from the new-session response, so this works on
+	// both Chrome and Firefox under W3C (the old legacy GET /session/:id did not).
 	caps, err := wd.Capabilities()
 	if err != nil {
 		t.Fatalf("wd.Capabilities() returned error: %v", err)
 	}
 
-	if strings.ToLower(caps["browserName"].(string)) != c.Browser {
-		t.Fatalf("bad browser name - %s (should be %s)", caps["browserName"], c.Browser)
+	name, ok := caps["browserName"].(string)
+	if !ok || strings.ToLower(name) != c.Browser {
+		t.Fatalf("Capabilities browserName = %v, want %q", caps["browserName"], c.Browser)
 	}
 }
 
