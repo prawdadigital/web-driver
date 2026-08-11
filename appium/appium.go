@@ -118,6 +118,29 @@ type Mobile interface {
 	// Pinch performs a two-finger zoom-out (pinch close) centered at (x, y): the
 	// fingers start radius pixels apart horizontally and move toward the center.
 	Pinch(x, y, radius int, duration time.Duration) error
+
+	// ExecuteMobile invokes an Appium "mobile:" extension command (e.g.
+	// "swipeGesture") with the given options and returns its raw result. The set
+	// of commands and options depends on the Appium driver (UiAutomator2,
+	// XCUITest, ...); see the driver's documentation.
+	ExecuteMobile(command string, options map[string]interface{}) (interface{}, error)
+
+	// The following are typed wrappers for the UiAutomator2 gesture commands,
+	// operating over a screen-area rectangle. For element-scoped gestures, other
+	// drivers, or other options, use ExecuteMobile directly.
+
+	// SwipeGesture swipes within area in direction ("up"/"down"/"left"/"right")
+	// covering the given percent (0.0-1.0) of the area.
+	SwipeGesture(area webdriver.Rect, direction string, percent float64) error
+	// ScrollGesture scrolls within area in direction ("up"/"down"/"left"/"right")
+	// covering the given percent (0.0-1.0) of the area.
+	ScrollGesture(area webdriver.Rect, direction string, percent float64) error
+	// PinchOpenGesture performs a zoom-in within area by the given percent.
+	PinchOpenGesture(area webdriver.Rect, percent float64) error
+	// PinchCloseGesture performs a zoom-out within area by the given percent.
+	PinchCloseGesture(area webdriver.Rect, percent float64) error
+	// LongClickGesture long-presses at (x, y) for the given duration.
+	LongClickGesture(x, y int, duration time.Duration) error
 }
 
 // mobileWD is the concrete Mobile implementation. It wraps a standard

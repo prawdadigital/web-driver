@@ -337,3 +337,56 @@ func TestGestures(t *testing.T) {
 		t.Errorf("Zoom: got %d input sources, want 2", len(srcs))
 	}
 }
+
+func TestMobileGestures(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	lastExec := func() (script string, arg0 map[string]interface{}) {
+		last := reqs[len(reqs)-1]
+		if last.method != "POST" || last.path != "/session/sess-1/execute/sync" {
+			t.Fatalf("expected POST /session/sess-1/execute/sync, got %s %s", last.method, last.path)
+		}
+		script, _ = last.body["script"].(string)
+		args, ok := last.body["args"].([]interface{})
+		if !ok || len(args) != 1 {
+			t.Fatalf("execute args = %v, want a single options element", last.body["args"])
+		}
+		arg0, _ = args[0].(map[string]interface{})
+		return script, arg0
+	}
+
+	if err := m.SwipeGesture(webdriver.Rect{X: 0, Y: 10, Width: 200, Height: 300}, "up", 0.75); err != nil {
+		t.Fatalf("SwipeGesture: %v", err)
+	}
+	script, opts := lastExec()
+	if script != "mobile: swipeGesture" {
+		t.Errorf("script = %q, want %q", script, "mobile: swipeGesture")
+	}
+	if opts["direction"] != "up" || opts["percent"].(float64) != 0.75 {
+		t.Errorf("swipe opts direction/percent = %v/%v", opts["direction"], opts["percent"])
+	}
+	if opts["width"].(float64) != 200 || opts["height"].(float64) != 300 {
+		t.Errorf("swipe opts width/height = %v/%v, want 200/300", opts["width"], opts["height"])
+	}
+
+	if err := m.LongClickGesture(15, 25, 800*time.Millisecond); err != nil {
+		t.Fatalf("LongClickGesture: %v", err)
+	}
+	script, opts = lastExec()
+	if script != "mobile: longClickGesture" {
+		t.Errorf("script = %q, want %q", script, "mobile: longClickGesture")
+	}
+	if opts["x"].(float64) != 15 || opts["duration"].(float64) != 800 {
+		t.Errorf("longClick opts x/duration = %v/%v, want 15/800", opts["x"], opts["duration"])
+	}
+
+	// Generic escape hatch.
+	if _, err := m.ExecuteMobile("scrollBackTo", map[string]interface{}{"elementId": "e1"}); err != nil {
+		t.Fatalf("ExecuteMobile: %v", err)
+	}
+	if script, opts := lastExec(); script != "mobile: scrollBackTo" || opts["elementId"] != "e1" {
+		t.Errorf("ExecuteMobile sent script=%q opts=%v", script, opts)
+	}
+}
