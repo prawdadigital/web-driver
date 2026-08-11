@@ -29,10 +29,15 @@ The biggest functional gap identified after Phase 1.
   (`SwipeGesture`, `ScrollGesture`, `PinchOpen/CloseGesture`, `LongClickGesture`).
   Mock-tested `/execute/sync` payload.
 
-### WS6 — Firefox / GeckoDriver on Selenium 4
-Phase 1 live testing focused on Chrome. Validate the W3C path with Firefox:
-add a Firefox subtest to `TestSelenium4` (or a Geckodriver-direct W3C run) and
-confirm the new WS2 features behave (or are correctly skipped) on Firefox.
+### WS6 — Firefox / GeckoDriver on Selenium 4 — DONE
+`TestSelenium4` now runs `Chrome` and `Firefox` subgroups via a shared
+`runSelenium4Suite` helper (new `-firefox_binary` flag; geckodriver via
+`-geckodriver_path` or the server's Selenium Manager). Live-verified on Firefox
+151 + Selenium 4.39.0: all W3C features — WindowRect, NewWindow, Print,
+ShadowRoot, RelativeLocators, WheelScroll — pass. Note: geckodriver/Firefox
+occasionally fails session creation on a cold start ("Process unexpectedly
+closed with status 0"); it passes on retry, so this is environmental flakiness,
+not a client bug (candidate for WS8 hardening / a session-creation retry).
 
 ### WS7 — CI/CD modernization
 The Travis badge/config is stale (points at `tebeka`, and travis-ci.org is

@@ -22,8 +22,9 @@ go test ./...                        # Build and run all packages' tests
 go test .                            # Root: transport + integration tests (incl. TestChrome, TestSelenium4)
 go test ./selenium/                  # Service-launching tests
 go test ./appium/                    # Appium package tests (mock HTTP server; no device needed)
-go test . -run=TestSelenium4                     # Selenium 4 integration group (needs the S4 JAR)
-go test . -run=TestSelenium4/RelativeLocators    # A single subtest (regex supported)
+go test . -run=TestSelenium4                       # Selenium 4 integration group (Chrome + Firefox; needs the S4 JAR)
+go test . -run=TestSelenium4/Firefox               # Just the Firefox browser subgroup
+go test . -run=TestSelenium4/Chrome/RelativeLocators  # A single subtest (regex supported)
 go test . -skip TestFrameBuffer                  # Skip the Xvfb-only test (e.g. on macOS)
 go test . --arg --help                           # List all test flags (driver/binary paths)
 go test . --docker                               # Run the suite hermetically inside Docker
