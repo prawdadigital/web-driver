@@ -1488,14 +1488,14 @@ func (elem *remoteWE) location(suffix string) (*Point, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Point{round(reply.Value.X), round(reply.Value.Y)}, nil
+		return &Point{X: round(reply.Value.X), Y: round(reply.Value.Y)}, nil
 	}
 
 	rect, err := elem.rect()
 	if err != nil {
 		return nil, err
 	}
-	return &Point{round(rect.X), round(rect.Y)}, nil
+	return &Point{X: round(rect.X), Y: round(rect.Y)}, nil
 }
 
 func (elem *remoteWE) Location() (*Point, error) {
@@ -1518,7 +1518,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Size{round(reply.Value.Width), round(reply.Value.Height)}, nil
+		return &Size{Width: round(reply.Value.Width), Height: round(reply.Value.Height)}, nil
 	}
 
 	rect, err := elem.rect()
@@ -1526,7 +1526,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		return nil, err
 	}
 
-	return &Size{round(rect.Width), round(rect.Height)}, nil
+	return &Size{Width: round(rect.Width), Height: round(rect.Height)}, nil
 }
 
 type rect struct {

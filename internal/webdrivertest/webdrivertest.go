@@ -1491,7 +1491,9 @@ func testProxy(t *testing.T, c Config) {
 			default:
 			}
 			if err != nil {
-				t.Fatalf("s.ListenAndServe(_) returned error: %v", err)
+				// Errorf (not Fatalf) is used because this runs on a separate
+				// goroutine, where Fatalf's runtime.Goexit would not work.
+				t.Errorf("socks.Serve(_) returned error: %v", err)
 			}
 		}()
 		defer func() {
