@@ -36,6 +36,9 @@ func Example_windowsDesktop() {
 		App(`C:\Windows\System32\notepad.exe`).
 		ToCapabilities()
 
+	// appium.Driver is an alias for appium.Mobile that reads naturally for a
+	// desktop session.
+	var driver appium.Driver
 	driver, err := appium.NewRemote(caps, "http://127.0.0.1:4723")
 	if err != nil {
 		panic(err)

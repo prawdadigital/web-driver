@@ -151,6 +151,11 @@ type Mobile interface {
 	LongClickGesture(x, y int, duration time.Duration) error
 }
 
+// Driver is an alias for Mobile. It reads more naturally when the Appium session
+// drives a native desktop application (Windows or macOS) rather than a mobile
+// device; the two names are fully interchangeable.
+type Driver = Mobile
+
 // mobileWD is the concrete Mobile implementation. It wraps a standard
 // webdriver.WebDriver and issues the mobile commands via ExecuteCommand.
 type mobileWD struct {
