@@ -68,10 +68,21 @@ Selenium 4 integration job. Update or drop the README badges.
   cookie-field diff on very recent Chrome and the `Proxy/SOCKS` Selenium Manager
   `--proxy` quirk when no ChromeDriver is vendored.
 
-### WS9 — Desktop / native "regular" apps (optional)
-The client is protocol-generic, so it can already reach Appium desktop drivers
-(appium-windows-driver, mac2). Add documentation + an example (and, if useful, a
-small helper) for driving native desktop apps; note it is untested here.
+### WS9 — Native + desktop apps — DONE
+Made native and desktop app support first-class in the `appium` package:
+- `Platform*` and `Automation*` constants (Android/iOS/tvOS/Windows/Mac,
+  UiAutomator2/Espresso/XCUITest/Mac2/Windows/…).
+- Capability helpers: `BundleID` (iOS/Mac), `AppPackage`/`AppActivity` (Android).
+- Appium element-location strategies (`ByAccessibilityID`, `ByIOSClassChain`,
+  `ByAndroidUIAutomator`, `ByImage`, …).
+- `ExecuteExtension(command, options)` for driver-specific
+  `mobile:`/`windows:`/`macos:` commands; `ExecuteMobile` is now a shorthand.
+- godoc examples for Android, Windows, and macOS, plus README coverage.
+- Mock-tested capability builders and the extension executor.
+
+Note: `appium.NewRemote` still returns a `Mobile` value; the name is historical
+— it represents any Appium-driven session, mobile or desktop. Live desktop
+verification needs a Windows/macOS host with the relevant Appium driver.
 
 ---
 

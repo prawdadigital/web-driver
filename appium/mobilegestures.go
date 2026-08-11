@@ -6,13 +6,19 @@ import (
 	webdriver "github.com/prawdadigital/web-driver"
 )
 
-// ExecuteMobile invokes an Appium "mobile:" extension command with the given
-// options map, i.e. ExecuteScript("mobile: <command>", [options]).
-func (m *mobileWD) ExecuteMobile(command string, options map[string]interface{}) (interface{}, error) {
+// ExecuteExtension invokes an Appium extension command verbatim (prefix
+// included), i.e. ExecuteScript(command, [options]).
+func (m *mobileWD) ExecuteExtension(command string, options map[string]interface{}) (interface{}, error) {
 	if options == nil {
 		options = map[string]interface{}{}
 	}
-	return m.ExecuteScript("mobile: "+command, []interface{}{options})
+	return m.ExecuteScript(command, []interface{}{options})
+}
+
+// ExecuteMobile invokes an Appium "mobile:" extension command with the given
+// options map, i.e. ExecuteScript("mobile: <command>", [options]).
+func (m *mobileWD) ExecuteMobile(command string, options map[string]interface{}) (interface{}, error) {
+	return m.ExecuteExtension("mobile: "+command, options)
 }
 
 // areaOptions converts a screen rectangle to the left/top/width/height options

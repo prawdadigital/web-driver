@@ -129,11 +129,30 @@ print page to PDF, shadow DOM (`GetShadowRoot`), new window/tab, W3C window rect
 and the full input Actions API including key, pointer (mouse/pen/touch), and
 wheel/scroll actions.
 
-**Appium 2:** the `appium:`-prefixing capability builder, contexts (native ↔
-webview), orientation, geolocation, app lifecycle
-(install/activate/terminate/remove/state), keyboard and device commands,
-settings, W3C touch gestures (`Tap`, `Swipe`, `Zoom`, `Pinch`, …), and typed
-wrappers over Appium `mobile:` gesture commands plus a generic `ExecuteMobile`.
+**Appium 2:** the `appium:`-prefixing capability builder with platform/driver
+constants, Appium element-location strategies (accessibility id, iOS class
+chain, Android UIAutomator, …), contexts (native ↔ webview), orientation,
+geolocation, app lifecycle (install/activate/terminate/remove/state), keyboard
+and device commands, settings, W3C touch gestures (`Tap`, `Swipe`, `Zoom`,
+`Pinch`, …), typed `mobile:` gesture wrappers, and `ExecuteExtension` for any
+driver-specific `mobile:`/`windows:`/`macos:` command.
+
+**Native and desktop apps:** the same `appium` package drives native mobile apps
+(Android UiAutomator2/Espresso, iOS XCUITest) and native **desktop** apps
+(Windows via the Windows driver, macOS via the Mac2 driver) — only the
+capabilities and the installed Appium driver differ. For example, a macOS app:
+
+```go
+caps := appium.NewCapabilities().
+	PlatformName(appium.PlatformMac).
+	AutomationName(appium.AutomationMac2).
+	BundleID("com.apple.TextEdit").
+	ToCapabilities()
+
+driver, _ := appium.NewRemote(caps, "http://127.0.0.1:4723")
+defer driver.Quit()
+driver.ExecuteExtension("macos: activateApp", map[string]interface{}{"bundleId": "com.apple.TextEdit"})
+```
 
 ## Downloading dependencies (for testing)
 

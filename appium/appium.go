@@ -119,9 +119,17 @@ type Mobile interface {
 	// fingers start radius pixels apart horizontally and move toward the center.
 	Pinch(x, y, radius int, duration time.Duration) error
 
+	// ExecuteExtension invokes an Appium extension command given verbatim,
+	// including its vendor prefix, e.g. "windows: click" (Windows driver),
+	// "macos: launchApp" (Mac2 driver), or "mobile: swipeGesture". options is
+	// passed as the single script argument. This is the general escape hatch for
+	// driver-specific commands across mobile and desktop.
+	ExecuteExtension(command string, options map[string]interface{}) (interface{}, error)
+
 	// ExecuteMobile invokes an Appium "mobile:" extension command (e.g.
-	// "swipeGesture") with the given options and returns its raw result. The set
-	// of commands and options depends on the Appium driver (UiAutomator2,
+	// "swipeGesture") with the given options and returns its raw result. It is a
+	// shorthand for ExecuteExtension("mobile: "+command, options). The set of
+	// commands and options depends on the Appium driver (UiAutomator2,
 	// XCUITest, ...); see the driver's documentation.
 	ExecuteMobile(command string, options map[string]interface{}) (interface{}, error)
 

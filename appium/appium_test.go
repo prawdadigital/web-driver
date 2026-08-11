@@ -390,3 +390,80 @@ func TestMobileGestures(t *testing.T) {
 		t.Errorf("ExecuteMobile sent script=%q opts=%v", script, opts)
 	}
 }
+
+func TestNativeAndDesktopCapabilities(t *testing.T) {
+	// Windows desktop app.
+	win := NewCapabilities().
+		PlatformName(PlatformWindows).
+		AutomationName(AutomationWindows).
+		App("Root").
+		ToCapabilities()
+	if win["platformName"] != "Windows" || win["appium:automationName"] != "Windows" || win["appium:app"] != "Root" {
+		t.Errorf("windows caps = %v", win)
+	}
+
+	// macOS desktop app by bundle id.
+	mac := NewCapabilities().
+		PlatformName(PlatformMac).
+		AutomationName(AutomationMac2).
+		BundleID("com.apple.TextEdit").
+		ToCapabilities()
+	if mac["platformName"] != "Mac" || mac["appium:automationName"] != "Mac2" || mac["appium:bundleId"] != "com.apple.TextEdit" {
+		t.Errorf("mac caps = %v", mac)
+	}
+
+	// Android native app by package/activity.
+	android := NewCapabilities().
+		PlatformName(PlatformAndroid).
+		AutomationName(AutomationUiAutomator2).
+		AppPackage("com.example").
+		AppActivity(".MainActivity").
+		ToCapabilities()
+	if android["appium:appPackage"] != "com.example" || android["appium:appActivity"] != ".MainActivity" {
+		t.Errorf("android caps = %v", android)
+	}
+}
+
+func TestExecuteExtension(t *testing.T) {
+	var reqs []recordedRequest
+	m, cleanup := newTestMobile(t, &reqs)
+	defer cleanup()
+
+	last := func() (string, map[string]interface{}) {
+		r := reqs[len(reqs)-1]
+		if r.method != "POST" || r.path != "/session/sess-1/execute/sync" {
+			t.Fatalf("expected POST /execute/sync, got %s %s", r.method, r.path)
+		}
+		script, _ := r.body["script"].(string)
+		args, _ := r.body["args"].([]interface{})
+		if len(args) != 1 {
+			t.Fatalf("args = %v, want one element", r.body["args"])
+		}
+		opts, _ := args[0].(map[string]interface{})
+		return script, opts
+	}
+
+	// Windows driver uses the "windows:" prefix; the command is sent verbatim.
+	if _, err := m.ExecuteExtension("windows: click", map[string]interface{}{"elementId": "e1"}); err != nil {
+		t.Fatalf("ExecuteExtension(windows:): %v", err)
+	}
+	if script, opts := last(); script != "windows: click" || opts["elementId"] != "e1" {
+		t.Errorf("windows ext sent script=%q opts=%v", script, opts)
+	}
+
+	// Mac2 driver uses the "macos:" prefix.
+	if _, err := m.ExecuteExtension("macos: launchApp", map[string]interface{}{"bundleId": "com.apple.TextEdit"}); err != nil {
+		t.Fatalf("ExecuteExtension(macos:): %v", err)
+	}
+	if script, _ := last(); script != "macos: launchApp" {
+		t.Errorf("macos ext script = %q", script)
+	}
+
+	// ExecuteMobile remains a "mobile:" shorthand over ExecuteExtension.
+	if _, err := m.ExecuteMobile("shell", map[string]interface{}{"command": "ls"}); err != nil {
+		t.Fatalf("ExecuteMobile: %v", err)
+	}
+	if script, _ := last(); script != "mobile: shell" {
+		t.Errorf("ExecuteMobile script = %q, want mobile: shell", script)
+	}
+}
