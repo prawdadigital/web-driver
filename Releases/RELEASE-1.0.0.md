@@ -36,5 +36,13 @@ Commits: `6621f15`, `523f052`, `d9a7b6d`, `ece9687`, `e3b79d6` (go 1.21 + layout
 - Unit tests across all packages (webdriver 97%, remote 67%, firefox 91%, …) — `5a8e630`, `07b1677`
 - Full godoc, reworked README, MIT LICENSE, clean `go vet` — `ba19f46`, `16cade3`
 - Test-suite hardening (session-creation retry, navigation race) — `9412461`
+- Native + desktop app scenario tests (Android/Windows/macOS flows) — `f426c04`
+
+## Fixes
+
+- `WebDriver.Capabilities()` no longer uses the legacy `GET /session/:id`
+  command, which W3C WebDriver does not define (Selenium 4 returns "unknown
+  command"). It now returns the capabilities the remote end granted at session
+  creation, tracking desired vs. granted capabilities as Selenium clients do — `dea871d`.
 
 See the git history for the complete set of changes.
