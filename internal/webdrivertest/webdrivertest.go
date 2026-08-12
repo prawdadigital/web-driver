@@ -210,6 +210,66 @@ func RunW3CTests(t *testing.T, c Config) {
 	t.Run("ShadowRoot", runTest(testShadowRoot, c))
 	t.Run("RelativeLocators", runTest(testRelativeLocators, c))
 	t.Run("WheelScroll", runTest(testWheelScroll, c))
+	t.Run("Submit", runTest(testSubmit, c))
+	t.Run("MouseActions", runTest(testMouseActions, c))
+}
+
+func testSubmit(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+	el, err := wd.FindElement(webdriver.ByName, "q")
+	if err != nil {
+		t.Fatalf("wd.FindElement(q) returned error: %v", err)
+	}
+	// W3C removed element/submit; the client reimplements it via a script.
+	if err := el.Submit(); err != nil {
+		t.Fatalf("el.Submit() returned error: %v", err)
+	}
+	var u string
+	for i := 0; i < 20; i++ {
+		if u, err = wd.CurrentURL(); err != nil {
+			t.Fatalf("wd.CurrentURL() returned error: %v", err)
+		}
+		if strings.Contains(u, "/search") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("after Submit, URL = %q, want it to contain /search", u)
+}
+
+func testMouseActions(t *testing.T, c Config) {
+	wd := newRemote(t, newTestCapabilities(t, c), c)
+	defer quitRemote(t, wd)
+
+	if err := wd.Get(c.ServerURL); err != nil {
+		t.Fatalf("wd.Get() returned error: %v", err)
+	}
+	// Move to a harmless checkbox, then exercise the legacy mouse methods, which
+	// are now backed by the W3C Actions API (the old endpoints were removed).
+	el, err := wd.FindElement(webdriver.ByID, "chuk")
+	if err != nil {
+		t.Fatalf("wd.FindElement(chuk) returned error: %v", err)
+	}
+	if err := el.MoveTo(0, 0); err != nil {
+		t.Fatalf("el.MoveTo() returned error: %v", err)
+	}
+	if err := wd.ButtonDown(); err != nil {
+		t.Fatalf("wd.ButtonDown() returned error: %v", err)
+	}
+	if err := wd.ButtonUp(); err != nil {
+		t.Fatalf("wd.ButtonUp() returned error: %v", err)
+	}
+	if err := wd.DoubleClick(); err != nil {
+		t.Fatalf("wd.DoubleClick() returned error: %v", err)
+	}
+	if err := wd.Click(int(webdriver.LeftButton)); err != nil {
+		t.Fatalf("wd.Click() returned error: %v", err)
+	}
 }
 
 func testWheelScroll(t *testing.T, c Config) {
@@ -1197,11 +1257,12 @@ func testLog(t *testing.T, c Config) {
 	switch {
 	case c.Browser == "htmlunit":
 		t.Skip("Skipping on htmlunit")
-	case c.Browser == "firefox" && (c.SeleniumVersion.Major == 3 || c.SeleniumVersion.Major == 0):
-		// Log is not supported on Firefox with Selenium 3.
+	case c.Browser == "firefox":
+		// geckodriver does not implement the log command on any version: the W3C
+		// spec dropped the logging API in favor of BiDi log events.
 		// https://github.com/w3c/webdriver/issues/406
 		// https://github.com/mozilla/geckodriver/issues/284
-		t.Skip("The log interface is not supported on Firefox, since it is not yet part of the W3C spec.")
+		t.Skip("The log command is not supported by geckodriver (Firefox).")
 	}
 	caps := newTestCapabilities(t, c)
 	caps.SetLogLevel(log.Browser, log.All)

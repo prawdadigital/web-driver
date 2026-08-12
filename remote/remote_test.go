@@ -6,10 +6,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/chrome"
 )
 
 // recordedRequest captures a request received by the mock W3C server.
@@ -786,13 +788,6 @@ func TestElementInteractions(t *testing.T) {
 		t.Errorf("Clear request = %s", last.path)
 	}
 
-	if err := el.Submit(); err != nil {
-		t.Fatalf("Submit returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/element/e1/submit" {
-		t.Errorf("Submit request = %s", last.path)
-	}
-
 	if err := el.SendKeys("hi"); err != nil {
 		t.Fatalf("SendKeys returned error: %v", err)
 	}
@@ -800,13 +795,8 @@ func TestElementInteractions(t *testing.T) {
 	if last.method != "POST" || last.path != "/session/sess-1/element/e1/value" || last.body["text"] != "hi" {
 		t.Errorf("SendKeys request = %s %s %v", last.method, last.path, last.body)
 	}
-
-	if err := el.MoveTo(3, 4); err != nil {
-		t.Fatalf("MoveTo returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/moveto" || last.body["xoffset"].(float64) != 3 {
-		t.Errorf("MoveTo request = %s %v", last.path, last.body)
-	}
+	// Submit and MoveTo are W3C-only reimplementations; see
+	// TestElementSubmitUsesScript and TestElementMoveToUsesW3CActions.
 }
 
 func TestElementQueries(t *testing.T) {
@@ -1018,41 +1008,15 @@ func TestFindElementsRelative(t *testing.T) {
 	}
 }
 
-func TestLegacyPointerAndKeyHelpers(t *testing.T) {
+func TestKeyDownUpUsesW3CActions(t *testing.T) {
 	m := newMockServer(t)
 	defer m.close()
 
 	wd := newTestDriver(t, m)
 
-	if err := wd.Click(int(webdriver.LeftButton)); err != nil {
-		t.Fatalf("Click returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/click" || int(last.body["button"].(float64)) != int(webdriver.LeftButton) {
-		t.Errorf("Click request = %s %v", last.path, last.body)
-	}
-
-	if err := wd.DoubleClick(); err != nil {
-		t.Fatalf("DoubleClick returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/doubleclick" {
-		t.Errorf("DoubleClick path = %s", last.path)
-	}
-
-	if err := wd.ButtonDown(); err != nil {
-		t.Fatalf("ButtonDown returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/buttondown" {
-		t.Errorf("ButtonDown path = %s", last.path)
-	}
-
-	if err := wd.ButtonUp(); err != nil {
-		t.Fatalf("ButtonUp returned error: %v", err)
-	}
-	if last := m.last(); last.path != "/session/sess-1/buttonup" {
-		t.Errorf("ButtonUp path = %s", last.path)
-	}
-
-	// In W3C mode, KeyDown/KeyUp go through the actions endpoint.
+	// In W3C mode, KeyDown/KeyUp go through the actions endpoint. (The mouse
+	// helpers Click/DoubleClick/ButtonDown/ButtonUp are covered by
+	// TestMouseMethodsUseW3CActions.)
 	if err := wd.KeyDown("a"); err != nil {
 		t.Fatalf("KeyDown returned error: %v", err)
 	}
@@ -1148,5 +1112,164 @@ func TestErrorPropagatesToTypedMethods(t *testing.T) {
 	}
 	if we.Err != "no such window" {
 		t.Errorf("error = %+v", we)
+	}
+}
+
+// pointerActionTypes returns the action-type sequence of the first pointer input
+// source in a recorded /actions request body.
+func pointerActionTypes(t *testing.T, body map[string]interface{}) (string, []string) {
+	srcs, ok := body["actions"].([]interface{})
+	if !ok || len(srcs) == 0 {
+		t.Fatalf("actions body has no input sources: %v", body)
+	}
+	src := srcs[0].(map[string]interface{})
+	pt, _ := src["parameters"].(map[string]interface{})
+	var types []string
+	for _, a := range src["actions"].([]interface{}) {
+		types = append(types, a.(map[string]interface{})["type"].(string))
+	}
+	ptype, _ := pt["pointerType"].(string)
+	return ptype, types
+}
+
+func eqStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestMouseMethodsUseW3CActions verifies the legacy mouse methods now emit W3C
+// pointer-action sequences (the /click, /doubleclick, /buttondown, /buttonup
+// endpoints were removed in W3C).
+func TestMouseMethodsUseW3CActions(t *testing.T) {
+	m := newMockServer(t)
+	defer m.close()
+	wd := newTestDriver(t, m)
+
+	cases := []struct {
+		name  string
+		call  func() error
+		types []string
+	}{
+		{"Click", func() error { return wd.Click(int(webdriver.LeftButton)) }, []string{"pointerDown", "pointerUp"}},
+		{"DoubleClick", wd.DoubleClick, []string{"pointerDown", "pointerUp", "pointerDown", "pointerUp"}},
+		{"ButtonDown", wd.ButtonDown, []string{"pointerDown"}},
+		{"ButtonUp", wd.ButtonUp, []string{"pointerUp"}},
+	}
+	for _, tc := range cases {
+		if err := tc.call(); err != nil {
+			t.Fatalf("%s returned error: %v", tc.name, err)
+		}
+		last := m.last()
+		if last.method != "POST" || last.path != "/session/sess-1/actions" {
+			t.Errorf("%s request = %s %s, want POST /session/sess-1/actions", tc.name, last.method, last.path)
+		}
+		ptype, types := pointerActionTypes(t, last.body)
+		if ptype != "mouse" {
+			t.Errorf("%s pointerType = %q, want mouse", tc.name, ptype)
+		}
+		if !eqStrings(types, tc.types) {
+			t.Errorf("%s action types = %v, want %v", tc.name, types, tc.types)
+		}
+	}
+}
+
+func TestElementMoveToUsesW3CActions(t *testing.T) {
+	m := newMockServer(t)
+	defer m.close()
+	m.values["/session/sess-1/element"] = element("e1")
+	wd := newTestDriver(t, m)
+
+	el, err := wd.FindElement(webdriver.ByCSSSelector, "#x")
+	if err != nil {
+		t.Fatalf("FindElement: %v", err)
+	}
+	if err := el.MoveTo(5, 7); err != nil {
+		t.Fatalf("MoveTo returned error: %v", err)
+	}
+	last := m.last()
+	if last.path != "/session/sess-1/actions" {
+		t.Fatalf("MoveTo path = %s, want /actions", last.path)
+	}
+	_, types := pointerActionTypes(t, last.body)
+	if !eqStrings(types, []string{"pointerMove"}) {
+		t.Errorf("MoveTo action types = %v, want [pointerMove]", types)
+	}
+	move := last.body["actions"].([]interface{})[0].(map[string]interface{})["actions"].([]interface{})[0].(map[string]interface{})
+	if move["x"].(float64) != 5 || move["y"].(float64) != 7 {
+		t.Errorf("MoveTo offsets = %v/%v, want 5/7", move["x"], move["y"])
+	}
+	// The origin must be the element reference, not "viewport".
+	origin, ok := move["origin"].(map[string]interface{})
+	if !ok || origin[webElementIdentifier] != "e1" {
+		t.Errorf("MoveTo origin = %v, want element e1", move["origin"])
+	}
+}
+
+func TestElementSubmitUsesScript(t *testing.T) {
+	m := newMockServer(t)
+	defer m.close()
+	m.values["/session/sess-1/element"] = element("e1")
+	wd := newTestDriver(t, m)
+
+	el, err := wd.FindElement(webdriver.ByCSSSelector, "#x")
+	if err != nil {
+		t.Fatalf("FindElement: %v", err)
+	}
+	if err := el.Submit(); err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+	// W3C removed element/submit, so it must run a script instead.
+	last := m.last()
+	if last.path != "/session/sess-1/execute/sync" {
+		t.Fatalf("Submit path = %s, want /execute/sync", last.path)
+	}
+	script, _ := last.body["script"].(string)
+	if !strings.Contains(script, "requestSubmit") || !strings.Contains(script, "closest('form')") {
+		t.Errorf("Submit script = %q, want it to submit the closest form", script)
+	}
+	args := last.body["args"].([]interface{})
+	if len(args) != 1 || args[0].(map[string]interface{})[webElementIdentifier] != "e1" {
+		t.Errorf("Submit args = %v, want [element e1]", args)
+	}
+}
+
+// TestChromeCapabilitiesReachAlwaysMatch verifies that AddChrome's options flow
+// into the W3C alwaysMatch payload under goog:chromeOptions (with custom prefs
+// preserved), and that the deprecated unprefixed "chromeOptions" key — which
+// strict W3C servers reject — is dropped.
+func TestChromeCapabilitiesReachAlwaysMatch(t *testing.T) {
+	caps := webdriver.Capabilities{"browserName": "chrome"}
+	caps.AddChrome(chrome.Capabilities{
+		Args:  []string{"--headless=new"},
+		Prefs: map[string]interface{}{"intl.accept_languages": "de-DE"},
+		MobileEmulation: &chrome.MobileEmulation{
+			DeviceMetrics: &chrome.DeviceMetrics{Width: 360, Height: 640, PixelRatio: 2},
+		},
+	})
+
+	am, ok := newW3CCapabilities(caps)["alwaysMatch"].(webdriver.Capabilities)
+	if !ok {
+		t.Fatal("newW3CCapabilities returned no alwaysMatch")
+	}
+	opts, ok := am["goog:chromeOptions"].(chrome.Capabilities)
+	if !ok {
+		t.Fatalf("goog:chromeOptions missing/incorrect in alwaysMatch: %#v", am["goog:chromeOptions"])
+	}
+	if opts.Prefs["intl.accept_languages"] != "de-DE" {
+		t.Errorf("custom pref not preserved: %v", opts.Prefs)
+	}
+	if opts.MobileEmulation == nil || opts.MobileEmulation.DeviceMetrics.Width != 360 {
+		t.Errorf("mobileEmulation not preserved: %v", opts.MobileEmulation)
+	}
+	// The deprecated unprefixed key must not appear in the W3C payload.
+	if _, present := am["chromeOptions"]; present {
+		t.Error("deprecated chromeOptions leaked into W3C alwaysMatch")
 	}
 }
