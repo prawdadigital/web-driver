@@ -1,7 +1,7 @@
 // Remote Selenium client implementation.
 // See https://www.w3.org/TR/webdriver for the protocol.
 
-package selenium
+package remote
 
 import (
 	"bytes"
@@ -18,8 +18,12 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	"github.com/tebeka/selenium/firefox"
-	"github.com/tebeka/selenium/log"
+	// The contract package is dot-imported so the transport can reference the
+	// WebDriver/WebElement interfaces and shared types (Capabilities, Error,
+	// Condition, ...) unqualified. Confined to this internal implementation.
+	. "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/firefox"
+	"github.com/prawdadigital/web-driver/log"
 )
 
 // Errors returned by Selenium server.
@@ -48,8 +52,12 @@ var remoteErrors = map[int]string{
 
 type remoteWD struct {
 	id, urlPrefix string
-	capabilities  Capabilities
-	w3cCompatible bool
+	// capabilities are the desired/requested capabilities passed to NewRemote.
+	capabilities Capabilities
+	// returnedCapabilities are the capabilities the remote end actually granted,
+	// captured from the new-session response (W3C has no get-capabilities command).
+	returnedCapabilities Capabilities
+	w3cCompatible        bool
 	// storedActions stores KeyActions and PointerActions for later execution.
 	storedActions  Actions
 	browser        string
@@ -91,34 +99,6 @@ type serverReply struct {
 	State  string
 
 	Error
-}
-
-// Error contains information about a failure of a command. See the table of
-// these strings at https://www.w3.org/TR/webdriver/#handling-errors .
-//
-// This error type is only returned by servers that implement the W3C
-// specification.
-type Error struct {
-	// Err contains a general error string provided by the server.
-	Err string `json:"error"`
-	// Message is a detailed, human-readable message specific to the failure.
-	Message string `json:"message"`
-	// Stacktrace may contain the server-side stacktrace where the error occurred.
-	Stacktrace string `json:"stacktrace"`
-	// HTTPCode is the HTTP status code returned by the server.
-	HTTPCode int
-	// LegacyCode is the "Response Status Code" defined in the legacy Selenium
-	// WebDriver JSON wire protocol. This code is only produced by older
-	// Selenium WebDriver versions, Chromedriver, and InternetExplorerDriver.
-	LegacyCode int
-}
-
-// TODO(minusnine): Make Stacktrace more descriptive. Selenium emits a list of
-// objects that enumerate various fields. This is not standard, though.
-
-// Error implements the error interface.
-func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.Err, e.Message)
 }
 
 // execute performs an HTTP request and inspects the returned data for an error
@@ -176,12 +156,23 @@ func executeCommand(method, url string, data []byte) (json.RawMessage, error) {
 	}
 
 	// Handle the W3C-compliant error format. In the W3C spec, the error is
-	// embedded in the 'value' field.
+	// embedded in the 'value' field. The "stacktrace" member may be either a
+	// string or a JSON array (Selenium 4 returns an array for session-creation
+	// errors), so it is decoded into a json.RawMessage to avoid an unmarshal
+	// failure that would otherwise cause the error to go undetected.
 	if len(reply.Value) > 0 {
-		respErr := new(Error)
-		if err := json.Unmarshal(reply.Value, respErr); err == nil && respErr.Err != "" {
-			respErr.HTTPCode = response.StatusCode
-			return nil, respErr
+		var w3cErr struct {
+			Err        string          `json:"error"`
+			Message    string          `json:"message"`
+			Stacktrace json.RawMessage `json:"stacktrace"`
+		}
+		if err := json.Unmarshal(reply.Value, &w3cErr); err == nil && w3cErr.Err != "" {
+			return nil, &Error{
+				Err:        w3cErr.Err,
+				Message:    w3cErr.Message,
+				Stacktrace: string(w3cErr.Stacktrace),
+				HTTPCode:   response.StatusCode,
+			}
 		}
 	}
 
@@ -502,6 +493,25 @@ func (wd *remoteWD) NewSession() (string, error) {
 				caps = value.returnedCapabilities
 			}
 
+			// Capture the full capability set the remote end granted so that
+			// Capabilities() can report it without an extra request: the W3C
+			// protocol has no get-capabilities command. W3C returns them under
+			// the "capabilities" key; legacy servers return them at the top level.
+			if wd.w3cCompatible {
+				var w3c struct {
+					Capabilities Capabilities `json:"capabilities"`
+				}
+				if err := json.Unmarshal(reply.Value, &w3c); err == nil {
+					wd.returnedCapabilities = w3c.Capabilities
+				}
+			} else {
+				var legacy Capabilities
+				if err := json.Unmarshal(reply.Value, &legacy); err == nil {
+					delete(legacy, "sessionId")
+					wd.returnedCapabilities = legacy
+				}
+			}
+
 			for _, s := range []string{caps.Version, caps.BrowserVersion} {
 				if s == "" {
 					continue
@@ -537,7 +547,22 @@ func (wd *remoteWD) SwitchSession(sessionID string) error {
 	return nil
 }
 
+// Capabilities returns the capabilities the remote end granted for this
+// session, as captured from the new-session response. The W3C WebDriver
+// protocol does not define a command to query capabilities after session
+// creation, so no request is made in that (default) case. For legacy JSON Wire
+// servers that never returned capabilities on creation, it falls back to the
+// legacy GET /session/:id command.
 func (wd *remoteWD) Capabilities() (Capabilities, error) {
+	if wd.returnedCapabilities != nil {
+		return wd.returnedCapabilities, nil
+	}
+	if wd.w3cCompatible {
+		// A W3C session always returns capabilities on creation; an empty set
+		// here means the server sent none, and there is no command to ask again.
+		return Capabilities{}, nil
+	}
+
 	url := wd.requestURL("/session/%s", wd.id)
 	response, err := wd.execute("GET", url, nil)
 	if err != nil {
@@ -868,6 +893,43 @@ func (wd *remoteWD) ResizeWindow(name string, width, height int) error {
 	})
 }
 
+func (wd *remoteWD) GetWindowRect() (*Rect, error) {
+	url := wd.requestURL("/session/%s/window/rect", wd.id)
+	response, err := wd.execute("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value Rect })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
+	return &reply.Value, nil
+}
+
+func (wd *remoteWD) SetWindowRect(rect Rect) error {
+	return wd.voidCommand("/session/%s/window/rect", rect)
+}
+
+func (wd *remoteWD) NewWindow(tab bool) (Window, error) {
+	typ := "window"
+	if tab {
+		typ = "tab"
+	}
+	data, err := json.Marshal(map[string]string{"type": typ})
+	if err != nil {
+		return Window{}, err
+	}
+	response, err := wd.execute("POST", wd.requestURL("/session/%s/window/new", wd.id), data)
+	if err != nil {
+		return Window{}, err
+	}
+	reply := new(struct{ Value Window })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return Window{}, err
+	}
+	return reply.Value, nil
+}
+
 func (wd *remoteWD) SwitchFrame(frame interface{}) error {
 	params := map[string]interface{}{}
 	switch f := frame.(type) {
@@ -914,7 +976,7 @@ type cookie struct {
 	Secure   bool        `json:"secure"`
 	Expiry   interface{} `json:"expiry"`
 	HTTPOnly bool        `json:"httpOnly"`
-	SameSite string      `json:"sameSite",omitempty`
+	SameSite string      `json:"sameSite,omitempty"`
 }
 
 func (c cookie) sanitize() Cookie {
@@ -1029,25 +1091,55 @@ func (wd *remoteWD) DeleteCookie(name string) error {
 }
 
 // TODO(minusnine): add a test for Click.
-func (wd *remoteWD) Click(button int) error {
-	return wd.voidCommand("/session/%s/click", map[string]int{
-		"button": button,
+// performPointer issues a one-off mouse pointer action sequence via the W3C
+// /actions endpoint, without disturbing any actions queued by StorePointerActions.
+func (wd *remoteWD) performPointer(inputID string, actions ...PointerAction) error {
+	raw := make([]map[string]interface{}, len(actions))
+	for i, a := range actions {
+		raw[i] = a
+	}
+	return wd.voidCommand("/session/%s/actions", map[string]interface{}{
+		"actions": []map[string]interface{}{{
+			"type":       "pointer",
+			"id":         inputID,
+			"parameters": map[string]string{"pointerType": "mouse"},
+			"actions":    raw,
+		}},
 	})
 }
 
-// TODO(minusnine): add a test for DoubleClick.
+func (wd *remoteWD) Click(button int) error {
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/click", map[string]int{"button": button})
+	}
+	return wd.performPointer("mouse",
+		PointerDownAction(MouseButton(button)),
+		PointerUpAction(MouseButton(button)),
+	)
+}
+
 func (wd *remoteWD) DoubleClick() error {
-	return wd.voidCommand("/session/%s/doubleclick", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/doubleclick", nil)
+	}
+	return wd.performPointer("mouse",
+		PointerDownAction(LeftButton), PointerUpAction(LeftButton),
+		PointerDownAction(LeftButton), PointerUpAction(LeftButton),
+	)
 }
 
-// TODO(minusnine): add a test for ButtonDown.
 func (wd *remoteWD) ButtonDown() error {
-	return wd.voidCommand("/session/%s/buttondown", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/buttondown", nil)
+	}
+	return wd.performPointer("mouse", PointerDownAction(LeftButton))
 }
 
-// TODO(minusnine): add a test for ButtonUp.
 func (wd *remoteWD) ButtonUp() error {
-	return wd.voidCommand("/session/%s/buttonup", nil)
+	if !wd.w3cCompatible {
+		return wd.voidCommand("/session/%s/buttonup", nil)
+	}
+	return wd.performPointer("mouse", PointerUpAction(LeftButton))
 }
 
 func (wd *remoteWD) SendModifier(modifier string, isDown bool) error {
@@ -1097,67 +1189,6 @@ func (wd *remoteWD) KeyUp(keys string) error {
 	return wd.keyAction("keyUp", keys)
 }
 
-// KeyPauseAction builds a KeyAction which pauses for the supplied duration.
-func KeyPauseAction(duration time.Duration) KeyAction {
-	return KeyAction{
-		"type":     "pause",
-		"duration": uint(duration / time.Millisecond),
-	}
-}
-
-// KeyUpAction builds a KeyAction press.
-func KeyUpAction(key string) KeyAction {
-	return KeyAction{
-		"type":  "keyUp",
-		"value": key,
-	}
-}
-
-// KeyDownAction builds a KeyAction which presses and holds
-// the specified key.
-func KeyDownAction(key string) KeyAction {
-	return KeyAction{
-		"type":  "keyDown",
-		"value": key,
-	}
-}
-
-// PointerPause builds a PointerAction which pauses for the supplied duration.
-func PointerPauseAction(duration time.Duration) PointerAction {
-	return PointerAction{
-		"type":     "pause",
-		"duration": uint(duration / time.Millisecond),
-	}
-}
-
-// PointerMove builds a PointerAction which moves the pointer.
-func PointerMoveAction(duration time.Duration, offset Point, origin PointerMoveOrigin) PointerAction {
-	return PointerAction{
-		"type":     "pointerMove",
-		"duration": uint(duration / time.Millisecond),
-		"origin":   origin,
-		"x":        offset.X,
-		"y":        offset.Y,
-	}
-}
-
-// PointerUp builds an action which releases the specified pointer key.
-func PointerUpAction(button MouseButton) PointerAction {
-	return PointerAction{
-		"type":   "pointerUp",
-		"button": button,
-	}
-}
-
-// PointerDown builds a PointerAction which presses
-// and holds the specified pointer key.
-func PointerDownAction(button MouseButton) PointerAction {
-	return PointerAction{
-		"type":   "pointerDown",
-		"button": button,
-	}
-}
-
 func (wd *remoteWD) StoreKeyActions(inputID string, actions ...KeyAction) {
 	rawActions := []map[string]interface{}{}
 	for _, action := range actions {
@@ -1180,6 +1211,18 @@ func (wd *remoteWD) StorePointerActions(inputID string, pointer PointerType, act
 		"id":         inputID,
 		"parameters": map[string]string{"pointerType": string(pointer)},
 		"actions":    rawActions,
+	})
+}
+
+func (wd *remoteWD) StoreWheelActions(inputID string, actions ...WheelAction) {
+	rawActions := []map[string]interface{}{}
+	for _, action := range actions {
+		rawActions = append(rawActions, action)
+	}
+	wd.storedActions = append(wd.storedActions, map[string]interface{}{
+		"type":    "wheel",
+		"id":      inputID,
+		"actions": rawActions,
 	})
 }
 
@@ -1263,6 +1306,20 @@ func (wd *remoteWD) ExecuteScriptRaw(script string, args []interface{}) ([]byte,
 	return wd.execScriptRaw(script, args, "/sync")
 }
 
+func (wd *remoteWD) ExecuteCommand(method, path string, params interface{}) ([]byte, error) {
+	var data []byte
+	if params != nil {
+		var err error
+		if data, err = json.Marshal(params); err != nil {
+			return nil, err
+		}
+	}
+	// The path is concatenated directly rather than passed through requestURL's
+	// format string so that any '%' in it is not treated as a format verb.
+	url := wd.urlPrefix + "/session/" + wd.id + path
+	return wd.execute(method, url, data)
+}
+
 func (wd *remoteWD) ExecuteScriptAsyncRaw(script string, args []interface{}) ([]byte, error) {
 	if !wd.w3cCompatible {
 		return wd.execScriptRaw(script, args, "_async")
@@ -1282,18 +1339,24 @@ func (wd *remoteWD) Screenshot() ([]byte, error) {
 	return ioutil.ReadAll(decoder)
 }
 
-// Condition is an alias for a type that is passed as an argument
-// for selenium.Wait(cond Condition) (error) function.
-type Condition func(wd WebDriver) (bool, error)
+func (wd *remoteWD) Print(options PrintOptions) ([]byte, error) {
+	data, err := json.Marshal(options)
+	if err != nil {
+		return nil, err
+	}
+	response, err := wd.execute("POST", wd.requestURL("/session/%s/print", wd.id), data)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value string })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
 
-const (
-	// DefaultWaitInterval is the default polling interval for selenium.Wait
-	// function.
-	DefaultWaitInterval = 100 * time.Millisecond
-
-	// DefaultWaitTimeout is the default timeout for selenium.Wait function.
-	DefaultWaitTimeout = 60 * time.Second
-)
+	// Selenium returns a base64-encoded PDF document.
+	decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewBufferString(reply.Value))
+	return ioutil.ReadAll(decoder)
+}
 
 func (wd *remoteWD) WaitWithTimeoutAndInterval(condition Condition, timeout, interval time.Duration) error {
 	startTime := time.Now()
@@ -1402,9 +1465,24 @@ func (elem *remoteWE) Text() (string, error) {
 	return elem.parent.stringCommand(urlTemplate)
 }
 
+// submitScript submits the form containing (or being) the given element. W3C
+// WebDriver removed the element/submit command, so this mirrors what the
+// official Selenium clients do. It calls the methods off HTMLFormElement's
+// prototype because a named control (e.g. <input name="submit">) shadows the
+// form's own submit/requestSubmit properties. requestSubmit is preferred so the
+// submit event fires, with a fallback to submit for older engines.
+const submitScript = `var form = arguments[0].closest('form');
+if (!form) { throw new Error('element is not within a form'); }
+var proto = HTMLFormElement.prototype;
+if (typeof proto.requestSubmit === 'function') { proto.requestSubmit.call(form); }
+else { proto.submit.call(form); }`
+
 func (elem *remoteWE) Submit() error {
-	urlTemplate := fmt.Sprintf("/session/%%s/element/%s/submit", elem.id)
-	return elem.parent.voidCommand(urlTemplate, nil)
+	if !elem.parent.w3cCompatible {
+		return elem.parent.voidCommand(fmt.Sprintf("/session/%%s/element/%s/submit", elem.id), nil)
+	}
+	_, err := elem.parent.ExecuteScript(submitScript, []interface{}{elem})
+	return err
 }
 
 func (elem *remoteWE) Clear() error {
@@ -1413,11 +1491,22 @@ func (elem *remoteWE) Clear() error {
 }
 
 func (elem *remoteWE) MoveTo(xOffset, yOffset int) error {
-	return elem.parent.voidCommand("/session/%s/moveto", map[string]interface{}{
-		"element": elem.id,
-		"xoffset": xOffset,
-		"yoffset": yOffset,
-	})
+	if !elem.parent.w3cCompatible {
+		return elem.parent.voidCommand("/session/%s/moveto", map[string]interface{}{
+			"element": elem.id,
+			"xoffset": xOffset,
+			"yoffset": yOffset,
+		})
+	}
+	// W3C moves the pointer relative to the center of the origin element.
+	move := PointerAction{
+		"type":     "pointerMove",
+		"duration": uint(0),
+		"origin":   elem,
+		"x":        xOffset,
+		"y":        yOffset,
+	}
+	return elem.parent.performPointer("mouse", move)
 }
 
 func (elem *remoteWE) FindElement(by, value string) (WebElement, error) {
@@ -1493,14 +1582,14 @@ func (elem *remoteWE) location(suffix string) (*Point, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Point{round(reply.Value.X), round(reply.Value.Y)}, nil
+		return &Point{X: round(reply.Value.X), Y: round(reply.Value.Y)}, nil
 	}
 
 	rect, err := elem.rect()
 	if err != nil {
 		return nil, err
 	}
-	return &Point{round(rect.X), round(rect.Y)}, nil
+	return &Point{X: round(rect.X), Y: round(rect.Y)}, nil
 }
 
 func (elem *remoteWE) Location() (*Point, error) {
@@ -1523,7 +1612,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		if err := json.Unmarshal(response, reply); err != nil {
 			return nil, err
 		}
-		return &Size{round(reply.Value.Width), round(reply.Value.Height)}, nil
+		return &Size{Width: round(reply.Value.Width), Height: round(reply.Value.Height)}, nil
 	}
 
 	rect, err := elem.rect()
@@ -1531,7 +1620,7 @@ func (elem *remoteWE) Size() (*Size, error) {
 		return nil, err
 	}
 
-	return &Size{round(rect.Width), round(rect.Height)}, nil
+	return &Size{Width: round(rect.Width), Height: round(rect.Height)}, nil
 }
 
 type rect struct {
@@ -1578,4 +1667,50 @@ func (elem *remoteWE) Screenshot(scroll bool) ([]byte, error) {
 	buf := []byte(data)
 	decoder := base64.NewDecoder(base64.StdEncoding, bytes.NewBuffer(buf))
 	return ioutil.ReadAll(decoder)
+}
+
+// shadowRootIdentifier is the string constant defined by the W3C specification
+// that is the key for the map that contains a unique shadow root identifier.
+const shadowRootIdentifier = "shadow-6066-11e4-a52e-4f735466cecf"
+
+func (elem *remoteWE) GetShadowRoot() (ShadowRoot, error) {
+	wd := elem.parent
+	url := wd.requestURL("/session/%s/element/%s/shadow", wd.id, elem.id)
+	response, err := wd.execute("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	reply := new(struct{ Value map[string]string })
+	if err := json.Unmarshal(response, reply); err != nil {
+		return nil, err
+	}
+	id := reply.Value[shadowRootIdentifier]
+	if id == "" {
+		return nil, fmt.Errorf("invalid shadow root returned: %+v", reply)
+	}
+	return &remoteSR{parent: wd, id: id}, nil
+}
+
+// remoteSR is the concrete ShadowRoot implementation.
+type remoteSR struct {
+	parent *remoteWD
+	id     string
+}
+
+func (sr *remoteSR) FindElement(by, value string) (WebElement, error) {
+	url := fmt.Sprintf("/session/%%s/shadow/%s/element", sr.id)
+	response, err := sr.parent.find(by, value, "", url)
+	if err != nil {
+		return nil, err
+	}
+	return sr.parent.DecodeElement(response)
+}
+
+func (sr *remoteSR) FindElements(by, value string) ([]WebElement, error) {
+	url := fmt.Sprintf("/session/%%s/shadow/%s/element", sr.id)
+	response, err := sr.parent.find(by, value, "s", url)
+	if err != nil {
+		return nil, err
+	}
+	return sr.parent.DecodeElements(response)
 }

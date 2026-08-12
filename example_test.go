@@ -1,4 +1,4 @@
-package selenium_test
+package webdriver_test
 
 import (
 	"fmt"
@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tebeka/selenium"
+	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 // This example shows how to navigate to a http://play.golang.org page, input a
@@ -14,18 +15,18 @@ import (
 //
 // If you want to actually run this example:
 //
-//   1. Ensure the file paths at the top of the function are correct.
-//   2. Remove the word "Example" from the comment at the bottom of the
-//      function.
-//   3. Run:
-//      go test -test.run=Example$ github.com/tebeka/selenium
+//  1. Ensure the file paths at the top of the function are correct.
+//  2. Remove the word "Example" from the comment at the bottom of the
+//     function.
+//  3. Run:
+//     go test -test.run=Example$ github.com/prawdadigital/web-driver
 func Example() {
 	// Start a Selenium WebDriver server instance (if one is not already
 	// running).
 	const (
 		// These paths will be different on your system.
-		seleniumPath    = "vendor/selenium-server-standalone-3.4.jar"
-		geckoDriverPath = "vendor/geckodriver-v0.18.0-linux64"
+		seleniumPath    = "internal/browsers/selenium-server-standalone-3.4.jar"
+		geckoDriverPath = "internal/browsers/geckodriver-v0.18.0-linux64"
 		port            = 8080
 	)
 	opts := []selenium.ServiceOption{
@@ -41,7 +42,7 @@ func Example() {
 	defer service.Stop()
 
 	// Connect to the WebDriver instance running locally.
-	caps := selenium.Capabilities{"browserName": "firefox"}
+	caps := webdriver.Capabilities{"browserName": "firefox"}
 	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
 	if err != nil {
 		panic(err)
@@ -54,7 +55,7 @@ func Example() {
 	}
 
 	// Get a reference to the text box containing code.
-	elem, err := wd.FindElement(selenium.ByCSSSelector, "#code")
+	elem, err := wd.FindElement(webdriver.ByCSSSelector, "#code")
 	if err != nil {
 		panic(err)
 	}
@@ -77,7 +78,7 @@ func Example() {
 	}
 
 	// Click the run button.
-	btn, err := wd.FindElement(selenium.ByCSSSelector, "#run")
+	btn, err := wd.FindElement(webdriver.ByCSSSelector, "#run")
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +87,7 @@ func Example() {
 	}
 
 	// Wait for the program to finish running and get the output.
-	outputDiv, err := wd.FindElement(selenium.ByCSSSelector, "#output")
+	outputDiv, err := wd.FindElement(webdriver.ByCSSSelector, "#output")
 	if err != nil {
 		panic(err)
 	}
@@ -117,25 +118,25 @@ func Example() {
 
 	// Create a point which will be used as an offset to click on the
 	// code editor text box element on the page.
-	offset := selenium.Point{X: 100, Y: 100}
+	offset := webdriver.Point{X: 100, Y: 100}
 
 	// Call StorePointerActions to store a number of Pointer actions which
 	// will be executed sequentially.
 	// "mouse1" is used as a unique virtual device identifier for this
 	// and future actions.
-	// selenium.MousePointer is used to identify the type of the pointer.
+	// webdriver.MousePointer is used to identify the type of the pointer.
 	// The stored action chain will move the pointer and click on the code
 	// editor text box on the page.
-	selenium.StorePointerActions("mouse1",
-		selenium.MousePointer,
-		// using selenium.FromViewport as the move origin
+	wd.StorePointerActions("mouse1",
+		webdriver.MousePointer,
+		// using webdriver.FromViewport as the move origin
 		// which calculates the offset from 0,0.
-		// the other valid option is selenium.FromPointer.
-		selenium.PointerMoveAction(0, offset, selenium.FromViewport),
-		selenium.PointerPauseAction(250),
-		selenium.PointerDownAction(selenium.LeftButton),
-		selenium.PointerPauseAction(250),
-		selenium.PointerUpAction(selenium.LeftButton),
+		// the other valid option is webdriver.FromPointer.
+		webdriver.PointerMoveAction(0, offset, webdriver.FromViewport),
+		webdriver.PointerPauseAction(250),
+		webdriver.PointerDownAction(webdriver.LeftButton),
+		webdriver.PointerPauseAction(250),
+		webdriver.PointerUpAction(webdriver.LeftButton),
 	)
 
 	// Call StoreKeyActions to store a number of Key actions which
@@ -143,18 +144,18 @@ func Example() {
 	// "keyboard1" is used as a unique virtual device identifier
 	// for this and future actions.
 	// The stored action chain will send keyboard inputs to the browser.
-	selenium.StoreKeyActions("keyboard1",
-		selenium.KeyDownAction(selenium.ControlKey),
-		selenium.KeyPauseAction(50),
-		selenium.KeyDownAction("a"),
-		selenium.KeyPauseAction(50),
-		selenium.KeyUpAction("a"),
-		selenium.KeyUpAction(selenium.ControlKey),
-		selenium.KeyDownAction("h"),
-		selenium.KeyDownAction("e"),
-		selenium.KeyDownAction("l"),
-		selenium.KeyDownAction("l"),
-		selenium.KeyDownAction("o"),
+	wd.StoreKeyActions("keyboard1",
+		webdriver.KeyDownAction(webdriver.ControlKey),
+		webdriver.KeyPauseAction(50),
+		webdriver.KeyDownAction("a"),
+		webdriver.KeyPauseAction(50),
+		webdriver.KeyUpAction("a"),
+		webdriver.KeyUpAction(webdriver.ControlKey),
+		webdriver.KeyDownAction("h"),
+		webdriver.KeyDownAction("e"),
+		webdriver.KeyDownAction("l"),
+		webdriver.KeyDownAction("l"),
+		webdriver.KeyDownAction("o"),
 	)
 
 	// Call PerformActions to execute stored action - based on

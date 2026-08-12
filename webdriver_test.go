@@ -1,4 +1,4 @@
-package selenium_test
+package webdriver_test
 
 import (
 	"flag"
@@ -14,20 +14,22 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/golang/glog"
-	"github.com/tebeka/selenium"
-	"github.com/tebeka/selenium/internal/seleniumtest"
+	"github.com/prawdadigital/web-driver/internal/webdrivertest"
+	"github.com/prawdadigital/web-driver/selenium"
 )
 
 var (
 	selenium3Path          = flag.String("selenium3_path", "", "The path to the Selenium 3 server JAR. If empty or the file is not present, Firefox tests using Selenium 3 will not be run.")
-	firefoxBinarySelenium3 = flag.String("firefox_binary_for_selenium3", "vendor/firefox/firefox", "The name of the Firefox binary for Selenium 3 tests or the path to it. If the name does not contain directory separators, the PATH will be searched.")
+	selenium4Path          = flag.String("selenium4_path", "", "The path to the Selenium 4 server JAR. If empty or the file is not present, the Selenium 4 tests will not be run.")
+	firefoxBinarySelenium3 = flag.String("firefox_binary_for_selenium3", "internal/browsers/firefox/firefox", "The name of the Firefox binary for Selenium 3 tests or the path to it. If the name does not contain directory separators, the PATH will be searched.")
 	geckoDriverPath        = flag.String("geckodriver_path", "", "The path to the geckodriver binary. If empty or the file is not present, the Geckodriver tests will not be run.")
 	javaPath               = flag.String("java_path", "", "The path to the Java runtime binary to invoke. If not specified, 'java' will be used.")
 
 	chromeDriverPath = flag.String("chrome_driver_path", "", "The path to the ChromeDriver binary. If empty or the file is not present, Chrome tests will not be run.")
-	chromeBinary     = flag.String("chrome_binary", "vendor/chrome-linux/chrome", "The name of the Chrome binary or the path to it. If name is not an exact path, the PATH will be searched.")
+	chromeBinary     = flag.String("chrome_binary", "internal/browsers/chrome-linux/chrome", "The name of the Chrome binary or the path to it. If name is not an exact path, the PATH will be searched.")
+	firefoxBinary    = flag.String("firefox_binary", "internal/browsers/firefox/firefox", "The name of the Firefox binary or the path to it, used by the Selenium 4 tests. If name is not an exact path, the PATH will be searched.")
 
-	htmlUnitDriverPath = flag.String("htmlunit_driver_path", "vendor/htmlunit-driver.jar", "The path to the HTMLUnit Driver JAR.")
+	htmlUnitDriverPath = flag.String("htmlunit_driver_path", "internal/browsers/htmlunit-driver.jar", "The path to the HTMLUnit Driver JAR.")
 
 	useDocker          = flag.Bool("docker", false, "If set, run the tests in a Docker container.")
 	runningUnderDocker = flag.Bool("running_under_docker", false, "This is set by the Docker test harness and should not be needed otherwise.")
@@ -76,15 +78,19 @@ func findBestPath(glob string, binary bool) string {
 
 func setDriverPaths() error {
 	if *selenium3Path == "" {
-		*selenium3Path = findBestPath("vendor/selenium-server*" /*binary=*/, false)
+		*selenium3Path = findBestPath("internal/browsers/selenium-server*" /*binary=*/, false)
+	}
+
+	if *selenium4Path == "" {
+		*selenium4Path = findBestPath("internal/browsers/selenium-server*" /*binary=*/, false)
 	}
 
 	if *geckoDriverPath == "" {
-		*geckoDriverPath = findBestPath("vendor/geckodriver*" /*binary=*/, true)
+		*geckoDriverPath = findBestPath("internal/browsers/geckodriver*" /*binary=*/, true)
 	}
 
 	if *chromeDriverPath == "" {
-		*chromeDriverPath = findBestPath("vendor/chromedriver*" /*binary=*/, true)
+		*chromeDriverPath = findBestPath("internal/browsers/chromedriver*" /*binary=*/, true)
 	}
 
 	return nil
@@ -123,20 +129,20 @@ func TestChrome(t *testing.T) {
 	}
 
 	t.Run("Chromedriver", func(t *testing.T) {
-		runChromeTests(t, seleniumtest.Config{
+		runChromeTests(t, webdrivertest.Config{
 			Path: *chromeBinary,
 		})
 	})
 
 	t.Run("Selenium3", func(t *testing.T) {
-		runChromeTests(t, seleniumtest.Config{
+		runChromeTests(t, webdrivertest.Config{
 			Path:            *chromeBinary,
 			SeleniumVersion: semver.MustParse("3.0.0"),
 		})
 	})
 }
 
-func runChromeTests(t *testing.T, c seleniumtest.Config) {
+func runChromeTests(t *testing.T, c webdrivertest.Config) {
 	c.Browser = "chrome"
 	c.Headless = *headless
 
@@ -165,15 +171,115 @@ func runChromeTests(t *testing.T, c seleniumtest.Config) {
 		t.Fatalf("Error starting the server: %v", err)
 	}
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
-	seleniumtest.RunCommonTests(t, c)
-	seleniumtest.RunChromeTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
+	webdrivertest.RunChromeTests(t, c)
+	// The Selenium 4 / W3C additions are supported directly by ChromeDriver, but
+	// not by the legacy Selenium 3 grid.
+	if c.SeleniumVersion.Major != 3 {
+		webdrivertest.RunW3CTests(t, c)
+	}
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the ChromeDriver service: %v", err)
+	}
+}
+
+func TestSelenium4(t *testing.T) {
+	if *useDocker {
+		t.Skip("Skipping Selenium 4 tests because they will be run under a Docker container")
+	}
+	if _, err := os.Stat(*selenium4Path); err != nil {
+		t.Skipf("Skipping Selenium 4 tests because the server JAR was not found at path %q", *selenium4Path)
+	}
+
+	t.Run("Chrome", func(t *testing.T) {
+		if _, err := os.Stat(*chromeBinary); err != nil {
+			path, err := exec.LookPath(*chromeBinary)
+			if err != nil {
+				t.Skipf("Skipping Chrome tests because binary %q not found", *chromeBinary)
+			}
+			*chromeBinary = path
+		}
+		c := webdrivertest.Config{
+			Browser:         "chrome",
+			Path:            *chromeBinary,
+			SeleniumVersion: semver.MustParse("4.0.0"),
+			Headless:        *headless,
+		}
+		// If a ChromeDriver binary is available, point the server at it;
+		// otherwise the server's Selenium Manager provisions one automatically.
+		if *chromeDriverPath != "" {
+			if _, err := os.Stat(*chromeDriverPath); err == nil {
+				c.ServiceOptions = append(c.ServiceOptions, selenium.ChromeDriver(*chromeDriverPath))
+			}
+		}
+		runSelenium4Suite(t, c, webdrivertest.RunChromeTests)
+	})
+
+	t.Run("Firefox", func(t *testing.T) {
+		if _, err := os.Stat(*firefoxBinary); err != nil {
+			path, err := exec.LookPath(*firefoxBinary)
+			if err != nil {
+				t.Skipf("Skipping Firefox tests because binary %q not found", *firefoxBinary)
+			}
+			*firefoxBinary = path
+		}
+		c := webdrivertest.Config{
+			Browser:         "firefox",
+			Path:            *firefoxBinary,
+			SeleniumVersion: semver.MustParse("4.0.0"),
+			Headless:        *headless,
+		}
+		// If a geckodriver binary is available, point the server at it;
+		// otherwise the server's Selenium Manager provisions one automatically.
+		if *geckoDriverPath != "" {
+			if _, err := os.Stat(*geckoDriverPath); err == nil {
+				c.ServiceOptions = append(c.ServiceOptions, selenium.GeckoDriver(*geckoDriverPath))
+			}
+		}
+		runSelenium4Suite(t, c, webdrivertest.RunFirefoxTests)
+	})
+}
+
+// runSelenium4Suite launches a Selenium 4 server and runs the common, browser-
+// specific, and W3C test suites against the browser described by c.
+func runSelenium4Suite(t *testing.T, c webdrivertest.Config, runBrowserTests func(*testing.T, webdrivertest.Config)) {
+	if *startFrameBuffer {
+		c.ServiceOptions = append(c.ServiceOptions, selenium.StartFrameBuffer())
+	}
+	if testing.Verbose() {
+		selenium.SetDebug(true)
+		c.ServiceOptions = append(c.ServiceOptions, selenium.Output(os.Stderr))
+	}
+	if *javaPath != "" {
+		c.ServiceOptions = append(c.ServiceOptions, selenium.JavaPath(*javaPath))
+	}
+
+	port, err := pickUnusedPort()
+	if err != nil {
+		t.Fatalf("pickUnusedPort() returned error: %v", err)
+	}
+	c.Addr = fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
+
+	s, err := selenium.NewSeleniumService(*selenium4Path, port, c.ServiceOptions...)
+	if err != nil {
+		t.Fatalf("Error starting the Selenium 4 server with JAR %q: %v", *selenium4Path, err)
+	}
+
+	hs := httptest.NewServer(webdrivertest.Handler)
+	defer hs.Close()
+	c.ServerURL = hs.URL
+
+	webdrivertest.RunCommonTests(t, c)
+	runBrowserTests(t, c)
+	webdrivertest.RunW3CTests(t, c)
+
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Error stopping the Selenium 4 service: %v", err)
 	}
 }
 
@@ -194,14 +300,14 @@ func TestFirefox(t *testing.T) {
 	}
 
 	t.Run("Selenium3", func(t *testing.T) {
-		runFirefoxTests(t, *selenium3Path, seleniumtest.Config{
+		runFirefoxTests(t, *selenium3Path, webdrivertest.Config{
 			SeleniumVersion: semver.MustParse("3.0.0"),
 			ServiceOptions:  []selenium.ServiceOption{selenium.GeckoDriver(*geckoDriverPath)},
 			Path:            *firefoxBinarySelenium3,
 		})
 	})
 	t.Run("Geckodriver", func(t *testing.T) {
-		runFirefoxTests(t, *geckoDriverPath, seleniumtest.Config{
+		runFirefoxTests(t, *geckoDriverPath, webdrivertest.Config{
 			Path: *firefoxBinarySelenium3,
 		})
 	})
@@ -222,7 +328,7 @@ func TestHTMLUnit(t *testing.T) {
 		selenium.SetDebug(true)
 	}
 
-	c := seleniumtest.Config{
+	c := webdrivertest.Config{
 		Browser:         "htmlunit",
 		SeleniumVersion: semver.MustParse("3.0.0"),
 		ServiceOptions:  []selenium.ServiceOption{selenium.HTMLUnit(*htmlUnitDriverPath)},
@@ -241,18 +347,18 @@ func TestHTMLUnit(t *testing.T) {
 	}
 	c.Addr = fmt.Sprintf("http://127.0.0.1:%d/wd/hub", port)
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
-	seleniumtest.RunCommonTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the Selenium service: %v", err)
 	}
 }
 
-func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) {
+func runFirefoxTests(t *testing.T, webDriverPath string, c webdrivertest.Config) {
 	c.Browser = "firefox"
 
 	if *startFrameBuffer {
@@ -287,7 +393,7 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) 
 		t.Fatalf("Error starting the WebDriver server with binary %q: %v", webDriverPath, err)
 	}
 
-	hs := httptest.NewServer(seleniumtest.Handler)
+	hs := httptest.NewServer(webdrivertest.Handler)
 	defer hs.Close()
 	c.ServerURL = hs.URL
 
@@ -299,8 +405,8 @@ func runFirefoxTests(t *testing.T, webDriverPath string, c seleniumtest.Config) 
 
 	c.Headless = *headless
 
-	seleniumtest.RunCommonTests(t, c)
-	seleniumtest.RunFirefoxTests(t, c)
+	webdrivertest.RunCommonTests(t, c)
+	webdrivertest.RunFirefoxTests(t, c)
 
 	if err := s.Stop(); err != nil {
 		t.Fatalf("Error stopping the Selenium service: %v", err)

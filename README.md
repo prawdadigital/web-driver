@@ -1,199 +1,215 @@
-# The most complete, best-tested WebDriver client for Go
+# web-driver — a WebDriver client for Go (Selenium 4 & Appium 2)
 
-[![GoDoc](https://godoc.org/github.com/tebeka/selenium?status.svg)](https://godoc.org/github.com/tebeka/selenium)
-[![Travis](https://travis-ci.org/tebeka/selenium.svg?branch=master)](https://travis-ci.org/tebeka/selenium)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tebeka/selenium)](https://goreportcard.com/report/github.com/tebeka/selenium)
+[![Go Reference](https://pkg.go.dev/badge/github.com/prawdadigital/web-driver.svg)](https://pkg.go.dev/github.com/prawdadigital/web-driver)
+[![Go Report Card](https://goreportcard.com/badge/github.com/prawdadigital/web-driver)](https://goreportcard.com/report/github.com/prawdadigital/web-driver)
 
-## About
-
-This is a [WebDriver][selenium] client for [Go][go]. It supports the
-[WebDriver protocol][webdriver] and has been tested with various versions of
-[Selenium WebDriver][selenium], Firefox and [Geckodriver][geckodriver], and
-Chrome and [ChromeDriver][chromedriver],
-
-`selenium` is currently maintained by Eric Garrido ([@minusnine][minusnine]).
-
-[selenium]: http://seleniumhq.org/
-[webdriver]: https://www.w3.org/TR/webdriver/
-[go]: http://golang.org/
-[server]: http://seleniumhq.org/download/
-[geckodriver]: https://github.com/mozilla/geckodriver
-[chromedriver]: https://sites.google.com/a/chromium.org/chromedriver/
-[minusnine]: http://github.com/minusnine
-
-## Installing
-
-Run
-
-    go get -t -d github.com/tebeka/selenium
-
-to fetch the package.
-
-The package requires a working WebDriver installation, which can include recent
-versions of a web browser being driven by Selenium WebDriver.
-
-### Downloading Dependencies
-
-We provide a means to download the ChromeDriver binary, the Firefox binary, the
-Selenium WebDriver JARs, and the Sauce Connect proxy binary. This is primarily
-intended for testing.
-
-    $ cd vendor
-    $ go run init.go --alsologtostderr  --download_browsers --download_latest
-    $ cd ..
-
-Re-run this periodically to get up-to-date versions of these binaries.
-
-## Documentation
-
-The API documentation is at https://godoc.org/github.com/tebeka/selenium. See [the example](https://github.com/tebeka/selenium/blob/master/example_test.go) and unit tests(for [sauce](https://github.com/tebeka/selenium/blob/master/sauce_test.go), [selenium](https://github.com/tebeka/selenium/blob/master/selenium_test.go) and [service](https://github.com/tebeka/selenium/blob/master/service_test.go)) for better usage information.
-
-## Known Issues
-
-Any issues are usually because the underlying browser automation framework has a
-bug or inconsistency. Where possible, we try to cover up these underlying
-problems in the client, but sometimes workarounds require higher-level
-intervention.
-
-Please feel free to [file an issue][issue] if this client doesn't work as
-expected.
-
-[issue]: https://github.com/tebeka/selenium/issues/new
-
-Below are known issues that affect the usage of this API. There are likely
-others filed on the respective issue trackers.
-
-### Selenium 2
-
-No longer supported.
-
-### Selenium 3
-
-1.  [Selenium 3 NewSession does not implement the W3C-specified parameters](https://github.com/SeleniumHQ/selenium/issues/2827).
-
-### Geckodriver (Standalone)
-
-1.  [Geckodriver does not support the Log API](https://github.com/mozilla/geckodriver/issues/284)
-    because it
-    [hasn't been defined in the spec yet](https://github.com/w3c/webdriver/issues/406).
-2.  Firefox via Geckodriver (and also through Selenium)
-    [doesn't handle clicking on an element](https://github.com/mozilla/geckodriver/issues/1007).
-3.  Firefox via Geckodriver doesn't handle sending control characters
-    [without appending a terminating null key](https://github.com/mozilla/geckodriver/issues/665).
-
-### Chromedriver
-
-1. [Headless Chrome does not support running extensions](https://crbug.com/706008).
-
-## Breaking Changes
-
-There are a number of upcoming changes that break backward compatibility in an
-effort to improve and adapt the existing API. They are listed here:
-
-### 22 August 2017
-
-The `Version` constant was removed as it is unused.
-
-### 18 April 2017
-
-The Log method was changed to accept a typed constant for the type of log to
-retrieve, instead of a raw string. The return value was also changed to provide
-a more idiomatic type.
-
-## Hacking
-
-Patches are encouraged through GitHub pull requests. Please ensure that:
-
-1.  A test is added for anything more than a trivial change and that the
-    existing tests pass. See below for instructions on setting up your test
-    environment.
-2.  Please ensure that `gofmt` has been run on the changed files before
-    committing. Install a pre-commit hook with the following command:
-
-    $ ln -s ../../misc/git/pre-commit .git/hooks/pre-commit
-
-See [the issue tracker][issues] for features that need implementing.
-
-[issues]: https://github.com/tebeka/selenium/issues
-
-### Testing Locally
-
-Install `xvfb` and Java if they is not already installed, e.g.:
-
-    sudo apt-get install xvfb openjdk-11-jre
-
-Run the tests:
-
-    $ go test
-
-*   There is one top-level test for each of:
-
-    1.  Chromium and ChromeDriver.
-    2.  A new version of Firefox and Selenium 3.
-    3.  HTMLUnit, a Java-based lightweight headless browser implementation.
-    4.  A new version of Firefox directly against Geckodriver.
-
-    There are subtests that are shared between both top-level tests.
-
-*   To run only one of the top-level tests, pass one of:
-
-    *   `-test.run=TestFirefoxSelenium3`,
-    *   `-test.run=TestFirefoxGeckoDriver`,
-    *   `-test.run=TestHTMLUnit`, or
-    *   `-test.run=TestChrome`.
-
-    To run a specific subtest, pass `-test.run=Test<Browser>/<subtest>` as
-    appropriate. This flag supports regular expressions.
-
-*   If the Chrome or Firefox binaries, the Selenium JAR, the Geckodriver binary,
-    or the ChromeDriver binary cannot be found, the corresponding tests will be
-    skipped.
-
-*   The binaries and JAR under test can be configured by passing flags to `go
-    test`. See the available flags with `go test --arg --help`.
-
-*   Add the argument `-test.v` to see detailed output from the test automation
-    framework.
-
-### Testing With Docker
-
-To ensure hermeticity, we also have tests that run under Docker. You will need
-an installed and running Docker system.
-
-To run the tests under Docker, run:
-
-    $ go test --docker
-
-This will create a new Docker container and run the tests in it. (Note: flags
-supplied to this invocation are not curried through to the `go test` invocation
-within the Docker container).
-
-For debugging Docker directly, run the following commands:
-
-    $ docker build -t go-selenium testing/
-    $ docker run --volume=$(pwd):/code --workdir=/code -it go-selenium bash
-    root@6c7951e41db6:/code# testing/docker-test.sh
-    ... lots of testing output ...
-
-### Testing With Sauce Labs
-
-Tests can be run using a browser located in the cloud via Sauce Labs.
-
-To run the tests under Sauce, run:
-
-    $ go test --test.run=TestSauce --test.timeout=20m \
-      --experimental_enable_sauce \
-      --sauce_user_name=[username goes here] \
-      --sauce_access_key=[access key goes here]
-
-The Sauce access key can be obtained via
-[the Sauce Labs user settings page](https://saucelabs.com/beta/user-settings).
-
-Test results can be viewed through the
-[Sauce Labs Dashboard](https://saucelabs.com/beta/dashboard/tests).
+A single [WebDriver](https://www.w3.org/TR/webdriver/) client for Go that drives
+both **web browsers** (via Selenium 4 / ChromeDriver / GeckoDriver) and **mobile
+devices** (via [Appium 2](https://appium.io/)). It speaks the W3C WebDriver
+protocol and is tested against Chrome, Firefox, and Appium.
+
+This is a maintained fork of [tebeka/selenium](https://github.com/tebeka/selenium),
+restructured and extended for Selenium 4 and Appium 2.
+
+## Packages
+
+The module is a **pure contract at the root** with focused implementation
+packages layered on top:
+
+| Import path | Package | Purpose |
+| --- | --- | --- |
+| `github.com/prawdadigital/web-driver` | `webdriver` | The contract: `WebDriver`/`WebElement`/`ShadowRoot` interfaces and all shared types (`Capabilities`, `Cookie`, `Rect`, `PrintOptions`, actions, `RelativeBy`, …). No implementation. |
+| `.../remote` | `remote` | The W3C HTTP transport: `NewRemote`, `ExecuteCommand`, `DeleteSession`, `SetDebug`. |
+| `.../selenium` | `selenium` | Launches/manages local WebDriver servers (Selenium JAR, ChromeDriver, GeckoDriver) and provides browser-friendly `NewRemote`/`SetDebug`/`DeleteSession` wrappers. |
+| `.../appium` | `appium` | Appium 2 mobile client: a capability builder and a `Mobile` interface (contexts, app lifecycle, gestures, …). Depends only on `webdriver` + `remote`. |
+| `.../chrome`, `.../firefox`, `.../log`, `.../sauce` | | Typed browser options, logging constants, and Sauce Labs support. |
+
+Dependency graph: `remote → webdriver`; `selenium → webdriver + remote`;
+`appium → webdriver + remote`.
+
+## Install
+
+```
+go get github.com/prawdadigital/web-driver
+```
+
+You also need a running WebDriver server for browsers (a Selenium 4 JAR,
+ChromeDriver, or GeckoDriver) or an Appium 2 server for mobile. The `selenium`
+package can start a local server for you; see below.
+
+## Usage
+
+### Driving a browser with Selenium
+
+```go
+package main
+
+import (
+	"fmt"
+
+	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/chrome"
+	"github.com/prawdadigital/web-driver/selenium"
+)
+
+func main() {
+	const port = 4444
+
+	// Start a Selenium 4 server in the background (or use
+	// selenium.NewChromeDriverService / NewGeckoDriverService).
+	service, err := selenium.NewSeleniumService("internal/browsers/selenium-server.jar", port)
+	if err != nil {
+		panic(err)
+	}
+	defer service.Stop()
+
+	// Connect a WebDriver session to it.
+	caps := webdriver.Capabilities{"browserName": "chrome"}
+	caps.AddChrome(chrome.Capabilities{Args: []string{"--headless=new"}})
+
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
+	if err != nil {
+		panic(err)
+	}
+	defer wd.Quit()
+
+	if err := wd.Get("https://pkg.go.dev"); err != nil {
+		panic(err)
+	}
+	title, _ := wd.Title()
+	fmt.Println(title)
+}
+```
+
+If a server is already running, skip `NewSeleniumService` and call
+`selenium.NewRemote` (or `remote.NewRemote`) against its URL directly.
+
+### Driving a mobile device with Appium 2
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/prawdadigital/web-driver/appium"
+)
+
+func main() {
+	// Build capabilities; the "appium:" prefix is applied automatically.
+	caps := appium.NewCapabilities().
+		PlatformName("Android").
+		AutomationName("UiAutomator2").
+		DeviceName("Android Emulator").
+		App("/path/to/app.apk").
+		ToCapabilities()
+
+	// Connect to a running Appium 2 server (root base path, no /wd/hub).
+	driver, err := appium.NewRemote(caps, "http://127.0.0.1:4723")
+	if err != nil {
+		panic(err)
+	}
+	defer driver.Quit()
+
+	// Mobile commands, alongside every standard WebDriver method.
+	contexts, _ := driver.AvailableContexts()
+	fmt.Println(contexts)
+	_ = driver.Swipe(200, 800, 200, 200, 300*time.Millisecond) // swipe up
+}
+```
+
+See the [package documentation](https://pkg.go.dev/github.com/prawdadigital/web-driver)
+and [example_test.go](example_test.go) for more.
+
+## Features
+
+**Selenium 4 / W3C:** relative ("friendly") locators (`With(...).Above/Below/…`),
+print page to PDF, shadow DOM (`GetShadowRoot`), new window/tab, W3C window rect,
+and the full input Actions API including key, pointer (mouse/pen/touch), and
+wheel/scroll actions.
+
+**Appium 2:** the `appium:`-prefixing capability builder with platform/driver
+constants, Appium element-location strategies (accessibility id, iOS class
+chain, Android UIAutomator, …), contexts (native ↔ webview), orientation,
+geolocation, app lifecycle (install/activate/terminate/remove/state), keyboard
+and device commands, settings, W3C touch gestures (`Tap`, `Swipe`, `Zoom`,
+`Pinch`, …), typed `mobile:` gesture wrappers, and `ExecuteExtension` for any
+driver-specific `mobile:`/`windows:`/`macos:` command.
+
+**Native and desktop apps:** the same `appium` package drives native mobile apps
+(Android UiAutomator2/Espresso, iOS XCUITest) and native **desktop** apps
+(Windows via the Windows driver, macOS via the Mac2 driver) — only the
+capabilities and the installed Appium driver differ. For example, a macOS app:
+
+```go
+caps := appium.NewCapabilities().
+	PlatformName(appium.PlatformMac).
+	AutomationName(appium.AutomationMac2).
+	BundleID("com.apple.TextEdit").
+	ToCapabilities()
+
+driver, _ := appium.NewRemote(caps, "http://127.0.0.1:4723")
+defer driver.Quit()
+driver.ExecuteExtension("macos: activateApp", map[string]interface{}{"bundleId": "com.apple.TextEdit"})
+```
+
+## Downloading dependencies (for testing)
+
+A helper downloads the Selenium 4 server JAR, ChromeDriver, GeckoDriver, and the
+Sauce Connect proxy into `internal/browsers/`:
+
+```
+cd internal/browsers
+go run init.go --alsologtostderr --download_browsers --download_latest
+cd ..
+```
+
+Re-run periodically to refresh the binaries.
+
+## Testing
+
+```
+go test ./...                                # all packages (browser tests skip if binaries are absent)
+go test ./appium/                            # Appium client (mock HTTP server; no device needed)
+go test . -run=TestSelenium4                 # Selenium 4 integration group (Chrome + Firefox; needs the JAR)
+go test . -run=TestSelenium4/Chrome          # just the Chrome subgroup
+go test . -skip TestFrameBuffer              # skip the Xvfb-only test (e.g. on macOS)
+go test . --arg --help                       # list all test flags (driver/binary paths)
+go test . --docker                           # run the suite hermetically inside Docker
+```
+
+Integration tests require the relevant binaries (Selenium JAR, browsers,
+drivers); if they are not found the corresponding tests are skipped. Local
+Selenium/HTMLUnit testing on Linux also needs `xvfb` and a JRE
+(`sudo apt-get install xvfb openjdk-11-jre`). Run `gofmt -l .` before committing.
+
+## Known issues
+
+Most issues stem from the underlying browser automation framework rather than
+this client. Notably:
+
+- Headless Chrome does not support loading extensions
+  ([crbug 706008](https://crbug.com/706008)).
+- W3C wheel-scroll actions require a non-zero duration to take effect in headless
+  Chrome.
+- geckodriver/Firefox may occasionally fail session creation on a cold start
+  ("Process unexpectedly closed"); it succeeds on retry.
+
+Please [file an issue](https://github.com/prawdadigital/web-driver/issues/new) if
+the client does not behave as expected.
+
+## Contributing
+
+Patches are welcome via pull request. Please add tests for non-trivial changes
+and ensure `gofmt` has been run. A pre-commit hook is available:
+
+```
+ln -s ../../misc/git/pre-commit .git/hooks/pre-commit
+```
 
 ## License
 
-This project is licensed under the [MIT][mit] license.
-
-[mit]: https://raw.githubusercontent.com/tebeka/selenium/master/LICENSE
+MIT — see [LICENSE](LICENSE). This project is a fork of
+[tebeka/selenium](https://github.com/tebeka/selenium) by The Selenium Go Client
+Authors.

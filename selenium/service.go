@@ -1,3 +1,14 @@
+// Package selenium launches and manages local WebDriver server subprocesses
+// (the Selenium 4 standalone JAR, ChromeDriver, and GeckoDriver) and provides
+// thin NewRemote/SetDebug/DeleteSession convenience wrappers around the remote
+// package for the common browser case.
+//
+// The typical flow is to start a *Service with NewSeleniumService,
+// NewChromeDriverService, or NewGeckoDriverService, connect to its address with
+// NewRemote, drive the returned webdriver.WebDriver, and finally call
+// Service.Stop. ServiceOption functional options customize a Service before it
+// starts, and FrameBuffer optionally runs an X virtual frame buffer (Xvfb) for
+// headed browsers on Linux.
 package selenium
 
 import (
@@ -186,7 +197,12 @@ func NewSeleniumService(jarPath string, port int, opts ...ServiceOption) (*Servi
 	}
 	classpath = append(classpath, jarPath)
 	s.cmd.Args = append(s.cmd.Args, "-cp", strings.Join(classpath, ":"))
-	s.cmd.Args = append(s.cmd.Args, "org.openqa.grid.selenium.GridLauncherV3", "-port", strconv.Itoa(port), "-debug")
+	// Selenium 4 dropped GridLauncherV3 in favor of the grid Main entry point,
+	// invoked with a "standalone" subcommand and "--port". The classpath launch
+	// (rather than "java -jar") is retained so that an optional HTMLUnit driver
+	// JAR can be added to the classpath. The standalone server continues to serve
+	// the legacy "/wd/hub" base path for backward compatibility.
+	s.cmd.Args = append(s.cmd.Args, "org.openqa.selenium.grid.Main", "standalone", "--port", strconv.Itoa(port))
 
 	if err := s.start(port); err != nil {
 		return nil, err

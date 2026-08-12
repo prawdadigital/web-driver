@@ -1,4 +1,14 @@
 // Package chrome provides Chrome-specific options for WebDriver.
+//
+// The central type is Capabilities, a typed representation of the
+// "goog:chromeOptions" object understood by ChromeDriver. It is meant to be
+// stored in the top-level webdriver.Capabilities map under CapabilitiesKey.
+// The package also provides helpers for packaging local Chrome extensions into
+// the CRX3 format that ChromeDriver accepts (AddExtension,
+// AddUnpackedExtension, NewExtension, and NewExtensionWithKey).
+//
+// See https://sites.google.com/a/chromium.org/chromedriver/capabilities for
+// the authoritative list of supported options.
 package chrome
 
 import (
@@ -16,7 +26,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mediabuyerbot/go-crx3/pb"
-	"github.com/tebeka/selenium/internal/zip"
+	"github.com/prawdadigital/web-driver/internal/zip"
 )
 
 // CapabilitiesKey is the key in the top-level Capabilities map under which
@@ -67,10 +77,14 @@ type Capabilities struct {
 	// window handles. For access to <webview> elements, include "webview" in
 	// this list.
 	WindowTypes []string `json:"windowTypes,omitempty"`
-	// Android Chrome WebDriver path "com.android.chrome"
+	// AndroidPackage is the package name of the Chrome (or WebView) app to
+	// automate on Android, e.g. "com.android.chrome".
 	AndroidPackage string `json:"androidPackage,omitempty"`
-	// Use W3C mode, if true.
-	W3C bool `json:"w3c"`
+	// W3C requests that ChromeDriver use W3C mode, if true. When false it is
+	// omitted from the capabilities: modern ChromeDriver defaults to W3C mode,
+	// and explicitly sending "w3c": false selects the removed legacy JSON wire
+	// protocol, which Selenium 4 rejects during the session handshake.
+	W3C bool `json:"w3c,omitempty"`
 }
 
 // TODO(minusnine): https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
