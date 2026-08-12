@@ -11,6 +11,7 @@ import (
 	"time"
 
 	webdriver "github.com/prawdadigital/web-driver"
+	"github.com/prawdadigital/web-driver/chrome"
 )
 
 // recordedRequest captures a request received by the mock W3C server.
@@ -1236,5 +1237,39 @@ func TestElementSubmitUsesScript(t *testing.T) {
 	args := last.body["args"].([]interface{})
 	if len(args) != 1 || args[0].(map[string]interface{})[webElementIdentifier] != "e1" {
 		t.Errorf("Submit args = %v, want [element e1]", args)
+	}
+}
+
+// TestChromeCapabilitiesReachAlwaysMatch verifies that AddChrome's options flow
+// into the W3C alwaysMatch payload under goog:chromeOptions (with custom prefs
+// preserved), and that the deprecated unprefixed "chromeOptions" key — which
+// strict W3C servers reject — is dropped.
+func TestChromeCapabilitiesReachAlwaysMatch(t *testing.T) {
+	caps := webdriver.Capabilities{"browserName": "chrome"}
+	caps.AddChrome(chrome.Capabilities{
+		Args:  []string{"--headless=new"},
+		Prefs: map[string]interface{}{"intl.accept_languages": "de-DE"},
+		MobileEmulation: &chrome.MobileEmulation{
+			DeviceMetrics: &chrome.DeviceMetrics{Width: 360, Height: 640, PixelRatio: 2},
+		},
+	})
+
+	am, ok := newW3CCapabilities(caps)["alwaysMatch"].(webdriver.Capabilities)
+	if !ok {
+		t.Fatal("newW3CCapabilities returned no alwaysMatch")
+	}
+	opts, ok := am["goog:chromeOptions"].(chrome.Capabilities)
+	if !ok {
+		t.Fatalf("goog:chromeOptions missing/incorrect in alwaysMatch: %#v", am["goog:chromeOptions"])
+	}
+	if opts.Prefs["intl.accept_languages"] != "de-DE" {
+		t.Errorf("custom pref not preserved: %v", opts.Prefs)
+	}
+	if opts.MobileEmulation == nil || opts.MobileEmulation.DeviceMetrics.Width != 360 {
+		t.Errorf("mobileEmulation not preserved: %v", opts.MobileEmulation)
+	}
+	// The deprecated unprefixed key must not appear in the W3C payload.
+	if _, present := am["chromeOptions"]; present {
+		t.Error("deprecated chromeOptions leaked into W3C alwaysMatch")
 	}
 }
