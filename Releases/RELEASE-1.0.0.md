@@ -40,9 +40,19 @@ Commits: `6621f15`, `523f052`, `d9a7b6d`, `ece9687`, `e3b79d6` (go 1.21 + layout
 
 ## Fixes
 
+Found by a live audit of every WebDriver/WebElement/Appium method against Chrome
+and Firefox on Selenium 4:
+
 - `WebDriver.Capabilities()` no longer uses the legacy `GET /session/:id`
   command, which W3C WebDriver does not define (Selenium 4 returns "unknown
   command"). It now returns the capabilities the remote end granted at session
   creation, tracking desired vs. granted capabilities as Selenium clients do — `dea871d`.
+- `Click(button)`, `DoubleClick`, `ButtonDown`, `ButtonUp`, `WebElement.MoveTo`,
+  and `WebElement.Submit` used JSON Wire endpoints removed in W3C; reimplemented
+  over the W3C Actions API (and a form-submit script for `Submit`) — `1b2820d`.
+- `Log` documented as a ChromeDriver-only extension; the test now skips
+  geckodriver (Firefox), which implements no log command — `0af4a98`.
+- `chrome.Capabilities` omits `"w3c": false` so it no longer forces the removed
+  legacy protocol and breaks Chrome sessions on Selenium 4.
 
 See the git history for the complete set of changes.
