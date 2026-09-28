@@ -637,17 +637,7 @@ func (wd *remoteWD) WindowHandles() ([]string, error) {
 }
 
 func (wd *remoteWD) CurrentURL() (string, error) {
-	url := wd.requestURL("/session/%s/url", wd.id)
-	response, err := wd.execute("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	reply := new(struct{ Value *string })
-	if err := json.Unmarshal(response, reply); err != nil {
-		return "", err
-	}
-
-	return *reply.Value, nil
+	return wd.stringCommand("/session/%s/url")
 }
 
 func (wd *remoteWD) Get(url string) error {
