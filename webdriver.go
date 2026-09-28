@@ -270,12 +270,16 @@ type PrintOptions struct {
 
 // Cookie represents an HTTP cookie.
 type Cookie struct {
-	Name     string   `json:"name"`
-	Value    string   `json:"value"`
-	Path     string   `json:"path"`
-	Domain   string   `json:"domain"`
-	Secure   bool     `json:"secure"`
-	Expiry   uint     `json:"expiry"`
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Path   string `json:"path"`
+	Domain string `json:"domain"`
+	Secure bool   `json:"secure"`
+	// Expiry is the cookie's expiry time as a Unix timestamp in seconds.
+	// It is omitted when zero: a cookie added without an explicit expiry is a
+	// session cookie. Serializing "expiry": 0 would tell the browser the cookie
+	// expired at the Unix epoch, so it would be discarded instead of stored.
+	Expiry   uint     `json:"expiry,omitempty"`
 	HTTPOnly bool     `json:"httpOnly"`
 	SameSite SameSite `json:"sameSite,omitempty"`
 }
