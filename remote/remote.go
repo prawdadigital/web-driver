@@ -1235,7 +1235,9 @@ func (wd *remoteWD) PerformActions() error {
 }
 
 func (wd *remoteWD) ReleaseActions() error {
-	return voidCommand("DELETE", wd.requestURL("/session/%s/actions", wd.id), nil)
+	err := voidCommand("DELETE", wd.requestURL("/session/%s/actions", wd.id), nil)
+	wd.storedActions = nil
+	return err
 }
 
 func (wd *remoteWD) DismissAlert() error {
