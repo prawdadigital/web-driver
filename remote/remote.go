@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -1552,13 +1553,7 @@ func (elem *remoteWE) GetAttribute(name string) (string, error) {
 }
 
 func round(f float64) int {
-	if f < -0.5 {
-		return int(f - 0.5)
-	}
-	if f > 0.5 {
-		return int(f + 0.5)
-	}
-	return 0
+	return int(math.Round(f))
 }
 
 func (elem *remoteWE) location(suffix string) (*Point, error) {
