@@ -812,7 +812,7 @@ func (wd *remoteWD) CloseWindow(name string) error {
 
 func (wd *remoteWD) MaximizeWindow(name string) error {
 	if !wd.w3cCompatible {
-		if name != "" {
+		if name == "" {
 			var err error
 			name, err = wd.CurrentWindowHandle()
 			if err != nil {
