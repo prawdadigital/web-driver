@@ -694,7 +694,7 @@ func (wd *remoteWD) find(by, value, suffix, url string) ([]byte, error) {
 			value = "#" + value
 		case ByName:
 			by = ByCSSSelector
-			value = fmt.Sprintf("input[name=%q]", value)
+			value = fmt.Sprintf("*[name=%q]", value)
 		}
 	}
 
