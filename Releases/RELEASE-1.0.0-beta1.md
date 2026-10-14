@@ -1,8 +1,8 @@
-# web-driver v1.0.0
+# web-driver v1.0.0-beta1
 
 A [WebDriver](https://www.w3.org/TR/webdriver/) client for Go that drives both
 **Selenium 4** (web browsers) and **Appium 2** (mobile and desktop) over the W3C
-protocol. This is the first release of the maintained fork of
+protocol. This is the first pre-release of the maintained fork of
 [tebeka/selenium](https://github.com/tebeka/selenium), reorganized into a shared
 contract with focused implementation packages.
 
