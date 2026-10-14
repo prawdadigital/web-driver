@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"mime"
 	"net/http"
 	"net/url"
@@ -637,17 +638,7 @@ func (wd *remoteWD) WindowHandles() ([]string, error) {
 }
 
 func (wd *remoteWD) CurrentURL() (string, error) {
-	url := wd.requestURL("/session/%s/url", wd.id)
-	response, err := wd.execute("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	reply := new(struct{ Value *string })
-	if err := json.Unmarshal(response, reply); err != nil {
-		return "", err
-	}
-
-	return *reply.Value, nil
+	return wd.stringCommand("/session/%s/url")
 }
 
 func (wd *remoteWD) Get(url string) error {
@@ -694,7 +685,7 @@ func (wd *remoteWD) find(by, value, suffix, url string) ([]byte, error) {
 			value = "#" + value
 		case ByName:
 			by = ByCSSSelector
-			value = fmt.Sprintf("input[name=%q]", value)
+			value = fmt.Sprintf("*[name=%q]", value)
 		}
 	}
 
@@ -812,7 +803,7 @@ func (wd *remoteWD) CloseWindow(name string) error {
 
 func (wd *remoteWD) MaximizeWindow(name string) error {
 	if !wd.w3cCompatible {
-		if name != "" {
+		if name == "" {
 			var err error
 			name, err = wd.CurrentWindowHandle()
 			if err != nil {
@@ -1235,7 +1226,9 @@ func (wd *remoteWD) PerformActions() error {
 }
 
 func (wd *remoteWD) ReleaseActions() error {
-	return voidCommand("DELETE", wd.requestURL("/session/%s/actions", wd.id), nil)
+	err := voidCommand("DELETE", wd.requestURL("/session/%s/actions", wd.id), nil)
+	wd.storedActions = nil
+	return err
 }
 
 func (wd *remoteWD) DismissAlert() error {
@@ -1560,13 +1553,7 @@ func (elem *remoteWE) GetAttribute(name string) (string, error) {
 }
 
 func round(f float64) int {
-	if f < -0.5 {
-		return int(f - 0.5)
-	}
-	if f > 0.5 {
-		return int(f + 0.5)
-	}
-	return 0
+	return int(math.Round(f))
 }
 
 func (elem *remoteWE) location(suffix string) (*Point, error) {

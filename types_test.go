@@ -106,4 +106,18 @@ func TestCookieMarshal(t *testing.T) {
 	if _, ok := m["sameSite"]; ok {
 		t.Errorf("empty SameSite should be omitted, got %v", m["sameSite"])
 	}
+	// A zero expiry (session cookie) must be omitted. Serializing "expiry": 0
+	// tells the browser the cookie expired at the Unix epoch, so it is dropped
+	// instead of stored (see issue #12).
+	if _, ok := m["expiry"]; ok {
+		t.Errorf("zero Expiry should be omitted, got %v", m["expiry"])
+	}
+
+	// A non-zero expiry is preserved.
+	data, _ = json.Marshal(Cookie{Name: "sid", Value: "abc", Expiry: 1893456000})
+	m = map[string]interface{}{}
+	json.Unmarshal(data, &m)
+	if m["expiry"] != float64(1893456000) {
+		t.Errorf("non-zero Expiry should be serialized, got %v", m["expiry"])
+	}
 }
